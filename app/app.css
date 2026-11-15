@@ -383,3 +383,20 @@ audio.media{width:min(520px,100%)}
 .sbar i{display:block;height:100%;width:100%;background:linear-gradient(110deg,#5563ff,#8b5cf6,#22d3ee,#8b5cf6,#5563ff);background-size:250% 100%}
 @media (prefers-reduced-motion:no-preference){.sbar i{animation:flow 1.2s linear infinite}}
 .layer .sheet{position:absolute}
+
+/* ---------- home + saved repos ---------- */
+.auth-card.home{display:grid;gap:14px;text-align:center}
+.auth-card.home .mark{margin:0 auto 2px}
+.auth-card.home h1{margin:0 0 6px}
+.auth-card.home .field{margin:0;text-align:left}
+.auth-card.home .linkbtn{margin:0}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+select{appearance:none;-webkit-appearance:none;padding-right:42px;font-weight:600;color:var(--ink);
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238a8aa0' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:right 14px center;background-size:18px}
+select:disabled{opacity:.55}
+button.conn{border:0;color:inherit;font:inherit;cursor:pointer}
+button.conn:hover{filter:brightness(1.06)}
+.tag.app{background:var(--sunk);color:var(--muted)}
+.tile{width:40px;height:40px;border-radius:12px;display:grid;place-items:center;background:var(--sunk);color:var(--accent);flex:none}
+.warnbox{margin-top:10px;padding:10px 12px;border-radius:12px;background:var(--warn-soft);color:var(--warn);font-size:.9rem}

@@ -19,36 +19,36 @@
 <div id="toasts" aria-live="polite"></div>
 <div id="sheetRoot"></div>
 
-<!-- Lock -->
-<section id="s-lock" class="auth" hidden>
-  <form class="auth-card" id="lockForm" autocomplete="off">
+<!-- Home -->
+<section id="s-home" class="auth" hidden>
+  <div class="auth-card home">
     <div class="mark" data-ico="mark"></div>
-    <h1>Welcome back</h1>
-    <p class="muted">Enter your passcode to open your files.</p>
-    <label class="field"><span>Passcode</span><input id="lockPass" type="password" placeholder="Passcode" autocomplete="off" autocapitalize="off" spellcheck="false"></label>
-    <p class="err" id="lockErr" role="alert"></p>
-    <button class="btn primary block" id="lockGo" type="submit">Unlock</button>
-    <button class="linkbtn" id="lockReset" type="button">Reset this device</button>
-  </form>
+    <h1 class="grad-text">Atlas</h1>
+    <button class="btn block" id="homeAdd" type="button"><span class="ico" data-ico="plus"></span>Add</button>
+    <label class="field"><span class="sr">Saved</span><select id="homeSel" aria-label="Saved repositories"></select></label>
+    <button class="btn primary block" id="homeLogin" type="button">Login</button>
+    <button class="linkbtn" id="homeReset" type="button" hidden>Reset this device</button>
+  </div>
 </section>
 
-<!-- Setup -->
+<!-- Add / edit -->
 <section id="s-setup" class="auth" hidden>
   <form class="auth-card" id="setupForm" autocomplete="off">
     <div class="mark" data-ico="mark"></div>
-    <h1>Set up</h1>
-    <p class="muted">Add your details once. They stay on this device.</p>
+    <h1 id="setupTitle">Add a repository</h1>
+    <p class="muted">Your details stay on this device.</p>
     <label class="field"><span>Account</span><input id="cfgOwner" placeholder="GitHub Account Name" autocapitalize="off" autocomplete="off" spellcheck="false"></label>
     <label class="field"><span>Repository</span><input id="cfgRepo" placeholder="Repo Name" autocapitalize="off" autocomplete="off" spellcheck="false"></label>
     <label class="field"><span>Branch<i>optional</i></span><input id="cfgBranch" placeholder="main" value="main" autocapitalize="off" autocomplete="off" spellcheck="false"></label>
     <label class="field"><span>Access token</span>
       <div class="pw"><input id="cfgToken" type="password" placeholder="Read &amp; Write Access Token" autocomplete="off" autocapitalize="off" spellcheck="false"><button type="button" class="ibtn" id="tokEye" aria-label="Show or hide token"></button></div>
     </label>
-    <label class="field" id="passRow"><span>Passcode<i>recommended</i></span><input id="cfgPass" type="password" placeholder="Choose a passcode" autocomplete="new-password" autocapitalize="off" spellcheck="false"></label>
-    <p class="hint" id="passHint">With a passcode your details are stored encrypted here, and you unlock with it next time. Without one, nothing is saved.</p>
+    <label class="field" id="passRow"><span>Passcode<i>optional</i></span><input id="cfgPass" type="password" placeholder="Choose a passcode" autocomplete="new-password" autocapitalize="off" spellcheck="false"></label>
+    <p class="hint" id="passHint">With a passcode, you enter it to log in and the token is encrypted with it. Without one, Login opens the repository straight away, and the token is kept on this device in a form only this browser can open.</p>
     <p class="err" id="setupErr" role="alert"></p>
-    <button class="btn primary block" type="submit" id="setupGo">Continue</button>
-    <button class="btn quiet block" type="button" id="setupCancel" hidden>Cancel</button>
+    <button class="btn primary block" type="submit" id="setupGo">Save</button>
+    <button class="btn block" type="button" id="setupOpen" style="margin-top:10px">Save and open</button>
+    <button class="btn quiet block" type="button" id="setupCancel">Cancel</button>
   </form>
 </section>
 
@@ -57,7 +57,7 @@
   <div class="window">
     <header class="titlebar">
       <div class="brand"><span class="mk" data-ico="mark"></span><span class="grad-text">Atlas</span></div>
-      <div class="conn" title="Connected"><i class="dot" id="connDot"></i><span class="t" id="connName"></span></div>
+      <button type="button" class="conn" id="connBtn" title="Switch repository" aria-label="Switch repository"><i class="dot" id="connDot"></i><span class="t" id="connName"></span></button>
       <button class="ibtn" id="menuBtn" aria-label="Menu"></button>
     </header>
 

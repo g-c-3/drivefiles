@@ -113,66 +113,219 @@ function saveBlob(blob,name){
 
 /* ================= state ================= */
 var S={
-  cfg:null, pass:null, tab:"files", logSink:null,
+  cfg:null, pass:null, pid:null, tab:"files", logSink:null,
   repo:{loaded:false,loading:false,error:null,files:new Map(),dirs:new Set(),index:new Map(),head:null},
   ex:{readers:[],items:[],errors:[],root:null,locked:[],dest:"",destTouched:false,running:false,cancel:false,opening:false},
   lib:{cwd:"",sel:new Set(),q:"",exp:new Set()},
   act:{loaded:false,list:[]},
-  opts:{filePolicy:"skip",folderPolicy:"merge",strip:false,limit:48,sortKey:"name",sortDir:"asc",showApp:false,offline:false}
+  opts:{filePolicy:"skip",folderPolicy:"merge",strip:false,limit:48,sortKey:"name",sortDir:"asc",hideApp:false,offline:false}
 };
 var VK="a_vault", PK="a_prefs", lastWrite=0, hiddenAt=0;
 
-/* ================= vault ================= */
+/* ================= storage: saved repositories ================= */
 var CAN_CRYPTO=!!(window.crypto&&crypto.subtle);
+var PRK="a_profiles";
+var OPT_DEFAULTS=JSON.parse(JSON.stringify(S.opts));
 function b64(u8){var s="",i;for(i=0;i<u8.length;i+=0x8000) s+=String.fromCharCode.apply(null,u8.subarray(i,i+0x8000));return btoa(s);}
 function unb64(s){var bin=atob(s),u=new Uint8Array(bin.length),i;for(i=0;i<bin.length;i++)u[i]=bin.charCodeAt(i);return u;}
 async function deriveKey(pass,salt){
   var km=await crypto.subtle.importKey("raw",enc.encode(pass),"PBKDF2",false,["deriveKey"]);
   return crypto.subtle.deriveKey({name:"PBKDF2",salt:salt,iterations:200000,hash:"SHA-256"},km,{name:"AES-GCM",length:256},false,["encrypt","decrypt"]);
 }
-async function vaultSave(cfg,pass){
-  var salt=crypto.getRandomValues(new Uint8Array(16)), iv=crypto.getRandomValues(new Uint8Array(12));
-  var key=await deriveKey(pass,salt);
+async function sealWith(key,cfg,extra){
+  var iv=crypto.getRandomValues(new Uint8Array(12));
   var ct=new Uint8Array(await crypto.subtle.encrypt({name:"AES-GCM",iv:iv},key,enc.encode(JSON.stringify(cfg))));
-  localStorage.setItem(VK,JSON.stringify({v:1,s:b64(salt),i:b64(iv),d:b64(ct)}));
+  var o=extra||{}; o.v=2; o.i=b64(iv); o.d=b64(ct); return o;
 }
-async function vaultOpen(pass){
-  var o=JSON.parse(localStorage.getItem(VK));
-  var key=await deriveKey(pass,unb64(o.s));
+async function openWith(key,o){
   var pt=await crypto.subtle.decrypt({name:"AES-GCM",iv:unb64(o.i)},key,unb64(o.d));
   return JSON.parse(dec.decode(pt));
 }
-function hasVault(){try{return !!localStorage.getItem(VK);}catch(e){return false;}}
+/* the device key is a non-extractable key kept in IndexedDB, so the token is never stored as readable text */
+function keyDb(){
+  return new Promise(function(res,rej){
+    var r=indexedDB.open("atlas-keys",1);
+    r.onupgradeneeded=function(){r.result.createObjectStore("k");};
+    r.onsuccess=function(){res(r.result);}; r.onerror=function(){rej(r.error);};
+  });
+}
+async function deviceKey(create){
+  var db=await keyDb();
+  try{
+    var k=await new Promise(function(res,rej){var q=db.transaction("k").objectStore("k").get("main");q.onsuccess=function(){res(q.result);};q.onerror=function(){rej(q.error);};});
+    if(!k&&create){
+      k=await crypto.subtle.generateKey({name:"AES-GCM",length:256},false,["encrypt","decrypt"]);
+      await new Promise(function(res,rej){var tx=db.transaction("k","readwrite");tx.objectStore("k").put(k,"main");tx.oncomplete=function(){res();};tx.onerror=function(){rej(tx.error);};});
+    }
+    return k||null;
+  }finally{ db.close(); }
+}
+function readStore(){
+  try{var o=JSON.parse(localStorage.getItem(PRK)); if(o&&Array.isArray(o.list)) return o;}catch(e){}
+  return {v:2,last:null,list:[]};
+}
+var PF=readStore();
+function writeStore(){ try{localStorage.setItem(PRK,JSON.stringify(PF));}catch(e){ toast("This browser wouldn't save the details.",true); } }
+function migrateOld(){
+  /* an earlier version kept one passcode-protected entry under a_vault */
+  try{
+    var old=localStorage.getItem(VK);
+    if(old&&!PF.list.length){
+      var o=JSON.parse(old);
+      PF.list.push({id:newId(),repo:null,branch:"main",kind:"pass",enc:{v:1,s:o.s,i:o.i,d:o.d}});
+      PF.last=PF.list[0].id; writeStore();
+    }
+    if(old) localStorage.removeItem(VK);
+  }catch(e){}
+}
+function newId(){return "p"+Date.now().toString(36)+Math.random().toString(36).slice(2,7);}
+function findProf(id){for(var i=0;i<PF.list.length;i++) if(PF.list[i].id===id) return PF.list[i]; return null;}
+function profName(p){return p.repo||"Saved repository";}
+async function sealProfile(cfg,pass){
+  var p={repo:cfg.repo,branch:cfg.branch};
+  if(pass&&CAN_CRYPTO){
+    var salt=crypto.getRandomValues(new Uint8Array(16));
+    p.kind="pass"; p.enc=await sealWith(await deriveKey(pass,salt),cfg,{s:b64(salt)});
+  }else if(CAN_CRYPTO){
+    try{ p.kind="device"; p.enc=await sealWith(await deviceKey(true),cfg); }
+    catch(e){ p.kind="plain"; p.cfg=cfg; delete p.enc; }
+  }else{ p.kind="plain"; p.cfg=cfg; }
+  return p;
+}
+async function openProfile(p,pass){
+  if(p.kind==="plain") return p.cfg;
+  if(p.kind==="device"){ var k=await deviceKey(false); if(!k) throw new Error("key missing"); return openWith(k,p.enc); }
+  return openWith(await deriveKey(pass,unb64(p.enc.s)),p.enc);
+}
 function loadPrefs(){try{Object.assign(S.opts,JSON.parse(localStorage.getItem(PK)||"{}"));}catch(e){}}
 function savePrefs(){try{localStorage.setItem(PK,JSON.stringify(S.opts));}catch(e){}}
 
 /* ================= screens ================= */
 function showScreen(name){
-  ["s-lock","s-setup","shell"].forEach(function(id){$(id).hidden=(id!==name);});
+  ["s-home","s-setup","shell"].forEach(function(id){$(id).hidden=(id!==name);});
   window.scrollTo(0,0);
 }
+function curProfile(){return S.pid?findProf(S.pid):null;}
 function lockNow(){
-  S.cfg=null; S.pass=null; resetRepo(); S.lib.sel.clear(); closeAllSheets();
-  $("lockPass").value=""; $("lockErr").textContent="";
-  if(hasVault()){ showScreen("s-lock"); $("lockPass").focus(); } else showSetup(false);
+  S.cfg=null; S.pass=null; S.pid=null; resetRepo(); S.lib.sel.clear(); closeAllSheets();
+  showHome();
 }
-$("lockForm").addEventListener("submit",async function(e){
-  e.preventDefault();
-  var pass=$("lockPass").value; if(!pass) return;
-  $("lockGo").disabled=true; $("lockErr").textContent="";
-  try{ S.cfg=await vaultOpen(pass); S.pass=pass; $("lockPass").value=""; enterApp(); }
-  catch(err){ await sleep(600); $("lockErr").textContent="That passcode didn't work."; }
-  $("lockGo").disabled=false;
-});
-$("lockReset").addEventListener("click",function(){
-  openSheet({title:"Reset this device?",content:el("p",{class:"muted"},"This removes the saved details from this device. You can set them up again afterwards."),
-    actions:[{label:"Cancel"},{label:"Reset",kind:"danger",fn:function(a){try{localStorage.removeItem(VK);}catch(e){} a.close(); showSetup(false);}}]});
-});
-function showSetup(editing){
-  var c=S.cfg||{}, parts=(c.repo||"").split("/");
+function startSession(p,cfg,pass){
+  if(!p.repo){ p.repo=cfg.repo; p.branch=cfg.branch; }
+  PF.last=p.id; writeStore();
+  S.cfg=cfg; S.pass=pass||null; S.pid=p.id; resetRepo(); closeAllSheets(); enterApp();
+}
+function optionLabel(p){
+  var dup=PF.list.some(function(q){return q!==p&&profName(q).toLowerCase()===profName(p).toLowerCase();});
+  return profName(p)+(dup&&p.branch?"  ·  "+p.branch:"");
+}
+function showHome(){
+  var sel=$("homeSel"), list=PF.list;
+  sel.replaceChildren();
+  if(!list.length){
+    sel.appendChild(el("option",{value:""},"No saved repositories"));
+    sel.disabled=true; $("homeLogin").disabled=true; $("homeReset").hidden=true;
+  }else{
+    list.forEach(function(p){sel.appendChild(el("option",{value:p.id},optionLabel(p)));});
+    sel.disabled=false; $("homeLogin").disabled=false; $("homeReset").hidden=false;
+    sel.value=findProf(PF.last)?PF.last:list[0].id;
+  }
+  showScreen("s-home");
+}
+$("homeSel").addEventListener("change",function(){ if(findProf($("homeSel").value)){PF.last=$("homeSel").value;writeStore();} });
+$("homeAdd").addEventListener("click",function(){showSetup(null);});
+$("homeLogin").addEventListener("click",function(){ if($("homeSel").value) loginWith($("homeSel").value); });
+$("homeReset").addEventListener("click",function(){resetDeviceSheet();});
+
+async function loginWith(id){
+  var p=findProf(id); if(!p) return;
+  PF.last=id; writeStore();
+  if(p.kind==="pass"){ askPasscode(p); return; }
+  try{ startSession(p,await openProfile(p),null); }
+  catch(e){ toast("Couldn't open "+profName(p)+" on this device. Delete it and add it again.",true); }
+}
+function askPasscode(p){
+  var inp=el("input",{type:"password",placeholder:"Passcode",autocomplete:"off",autocapitalize:"off",spellcheck:"false"});
+  var content=el("div",null,
+    el("label",{class:"field",style:"margin-top:0"},el("span",null,"Passcode"),inp),
+    el("button",{type:"button",class:"linkbtn",onclick:function(){deleteSheet([p.id]);}},"Forgot the passcode? Delete this saved repository"));
+  var sh=openSheet({title:"Log in to "+profName(p),content:content,actions:[
+    {label:"Cancel"},
+    {label:"Log in",kind:"primary",fn:async function(){
+      var pass=inp.value; if(!pass) throw new Error("Enter your passcode.");
+      var cfg;
+      try{ cfg=await openProfile(p,pass); }catch(e){ await sleep(500); throw new Error("That passcode didn't work."); }
+      startSession(p,cfg,pass);
+    }}]});
+  inp.addEventListener("keydown",function(e){ if(e.key==="Enter"){e.preventDefault();sh.btns[1].click();} });
+  setTimeout(function(){inp.focus();},320);
+}
+
+/* ----- typed confirmation ----- */
+function confirmSheet(o){
+  var inp=el("input",{placeholder:"confirm",autocomplete:"off",autocapitalize:"off",autocorrect:"off",spellcheck:"false","aria-label":"Type confirm"});
+  var content=el("div",null,
+    o.body,
+    el("label",{class:"field"},el("span",null,"Type confirm to continue"),inp));
+  var sh=openSheet({title:o.title,content:content,actions:[
+    {label:"Cancel"},
+    {label:o.label,kind:"danger",fn:async function(a){
+      if(inp.value.trim().toLowerCase()!=="confirm") throw new Error("Type confirm to continue.");
+      await o.fn(a);
+    }}]});
+  var go=sh.btns[1]; go.disabled=true;
+  inp.addEventListener("input",function(){go.disabled=inp.value.trim().toLowerCase()!=="confirm";});
+  inp.addEventListener("keydown",function(e){ if(e.key==="Enter"){e.preventDefault();if(!go.disabled)go.click();} });
+  setTimeout(function(){inp.focus();},320);
+  return sh;
+}
+function deleteSheet(ids){
+  var ps=ids.map(findProf).filter(Boolean); if(!ps.length) return;
+  confirmSheet({
+    title:ps.length===1?"Delete this saved repository?":"Delete "+ps.length+" saved repositories?",
+    body:el("div",null,
+      el("p",null,"This removes the following and their access tokens from this device."),
+      el("ul",{class:"sumlist"},ps.slice(0,30).map(function(p){return el("li",null,ico("lock"),el("span",null,profName(p)+(p.branch?"  ·  "+p.branch:"")));})),
+      el("p",{class:"muted small",style:"margin-top:6px"},"Your files on GitHub aren't touched.")),
+    label:"Delete",
+    fn:async function(a){
+      var gone=new Set(ids), hadCurrent=S.pid&&gone.has(S.pid);
+      PF.list=PF.list.filter(function(p){return !gone.has(p.id);});
+      if(gone.has(PF.last)) PF.last=PF.list.length?PF.list[0].id:null;
+      writeStore(); a.close(); closeAllSheets();
+      toast("Deleted "+(ps.length===1?profName(ps[0]):ps.length+" saved repositories"));
+      if(hadCurrent) lockNow(); else if(!S.cfg) showHome();
+    }});
+}
+function resetDeviceSheet(){
+  confirmSheet({
+    title:"Reset this device?",
+    body:el("div",null,
+      el("p",null,"This removes every saved repository, access token and setting from this device, and clears its offline files."),
+      el("p",{class:"muted small",style:"margin-top:6px"},"Your files on GitHub aren't touched. You can add your repositories again afterwards.")),
+    label:"Reset",
+    fn:async function(a){
+      try{
+        Object.keys(localStorage).forEach(function(k){ if(k.indexOf("a_")===0) localStorage.removeItem(k); });
+      }catch(e){}
+      try{ indexedDB.deleteDatabase("atlas-keys"); }catch(e){}
+      try{ await clearOffline(); }catch(e){}
+      PF={v:2,last:null,list:[]}; S.opts=JSON.parse(JSON.stringify(OPT_DEFAULTS)); buildSegs();
+      a.close(); closeAllSheets(); S.cfg=null; S.pass=null; S.pid=null; resetRepo();
+      showHome(); toast("This device was reset");
+    }});
+}
+
+/* ----- add / edit ----- */
+var editingId=null;
+function showSetup(editId){
+  editingId=editId||null;
+  var c=editId?(S.cfg||{}):{}, parts=(c.repo||"").split("/");
+  $("setupTitle").textContent=editId?"Edit details":"Add a repository";
   $("cfgOwner").value=parts[0]||""; $("cfgRepo").value=parts[1]||""; $("cfgBranch").value=c.branch||"main"; $("cfgToken").value=c.token||"";
-  $("cfgPass").value=editing?(S.pass||""):""; $("cfgToken").type="password";
-  $("setupErr").textContent=""; $("setupCancel").hidden=!editing;
+  $("cfgPass").value=editId?(S.pass||""):""; $("cfgToken").type="password"; $("tokEye").innerHTML=svg("eye");
+  $("setupErr").textContent="";
+  $("setupGo").textContent=editId?"Save changes":"Save"; $("setupOpen").hidden=!!editId;
   $("passRow").hidden=$("passHint").hidden=!CAN_CRYPTO;
   showScreen("s-setup");
 }
@@ -180,27 +333,84 @@ $("tokEye").innerHTML=svg("eye");
 $("tokEye").addEventListener("click",function(){
   var f=$("cfgToken"), show=f.type==="password"; f.type=show?"text":"password"; $("tokEye").innerHTML=svg(show?"eyeoff":"eye");
 });
-$("setupCancel").addEventListener("click",function(){showScreen("shell");});
-$("setupForm").addEventListener("submit",async function(e){
-  e.preventDefault();
+$("setupCancel").addEventListener("click",function(){ if(editingId&&S.cfg) showScreen("shell"); else showHome(); });
+async function verifyRepo(cfg){
+  var r;
+  try{
+    r=await fetch("https://api.github.com/repos/"+cfg.repo+"/branches/"+cfg.branch.split("/").map(encodeURIComponent).join("/"),
+      {headers:{"Authorization":"Bearer "+cfg.token,"Accept":"application/vnd.github+json","X-GitHub-Api-Version":"2022-11-28"},cache:"no-store"});
+  }catch(e){ throw new Error("Couldn't reach GitHub. Check your connection and try again."); }
+  if(r.ok) return;
+  if(r.status===401) throw new Error("GitHub didn't accept that access token.");
+  if(r.status===404) throw new Error("Couldn't find "+cfg.repo+" on the branch "+cfg.branch+". Check the names, and that the token can reach this repository.");
+  if(r.status===403) throw new Error("GitHub refused the request. Check the token's permissions, or try again in a few minutes.");
+  throw new Error("GitHub answered "+r.status+". Try again in a moment.");
+}
+async function saveSetup(openAfter){
   var owner=$("cfgOwner").value.trim().replace(/^@/,""), name=$("cfgRepo").value.trim().replace(/\.git$/,"");
   var m=owner.match(/github\.com\/([^\/]+)(?:\/([^\/]+))?/i); if(m){owner=m[1]; if(m[2]&&!name) name=m[2].replace(/\.git$/,"");}
   var branch=$("cfgBranch").value.trim()||"main", token=$("cfgToken").value.trim(), pass=$("cfgPass").value;
   if(!/^[\w.-]+$/.test(owner)){ $("setupErr").textContent="Enter your GitHub account name."; return; }
   if(!/^[\w.-]+$/.test(name)){ $("setupErr").textContent="Enter the repository name."; return; }
   if(!token){ $("setupErr").textContent="Enter your access token."; return; }
-  $("setupGo").disabled=true;
+  var btns=[$("setupGo"),$("setupOpen"),$("setupCancel")]; btns.forEach(function(b){b.disabled=true;});
+  $("setupErr").textContent="";
   try{
     var cfg={repo:owner+"/"+name,branch:branch,token:token};
-    if(pass&&CAN_CRYPTO){ await vaultSave(cfg,pass); S.pass=pass; }
-    else { try{localStorage.removeItem(VK);}catch(x){} S.pass=null; }
-    S.cfg=cfg; resetRepo(); enterApp();
-  }catch(err){ $("setupErr").textContent="Couldn't save: "+(err&&err.message||err); }
-  $("setupGo").disabled=false;
-});
+    await verifyRepo(cfg);
+    var p=await sealProfile(cfg,pass), old=null, i;
+    if(editingId) old=findProf(editingId);
+    if(!old) for(i=0;i<PF.list.length;i++){ var q=PF.list[i]; if(profName(q).toLowerCase()===cfg.repo.toLowerCase()&&q.branch===cfg.branch){old=q;break;} }
+    if(old){ p.id=old.id; PF.list[PF.list.indexOf(old)]=p; } else { p.id=newId(); PF.list.push(p); }
+    PF.last=p.id; writeStore();
+    if(editingId){ S.cfg=cfg; S.pass=(p.kind==="pass")?pass:null; S.pid=p.id; resetRepo(); enterApp(); toast("Saved"); }
+    else if(openAfter) startSession(p,cfg,p.kind==="pass"?pass:null);
+    else { showHome(); toast("Saved "+cfg.repo); }
+  }catch(err){ $("setupErr").textContent=(err&&err.message)||String(err); }
+  btns.forEach(function(b){b.disabled=false;});
+}
+$("setupForm").addEventListener("submit",function(e){e.preventDefault();saveSetup(false);});
+$("setupOpen").addEventListener("click",function(){saveSetup(true);});
+
+/* ----- switch and manage, from inside the app ----- */
+function switchSheet(){
+  var list=el("div",{class:"list"});
+  PF.list.forEach(function(p){
+    var cur=p.id===S.pid;
+    list.appendChild(el("div",{class:"row nav"+(cur?" sel":""),role:"button",tabindex:"0",onclick:function(){
+      if(cur){closeAllSheets();return;} closeAllSheets(); loginWith(p.id);
+    }},el("span",{class:"tile"},ico("lock")),el("div",{class:"name"},profName(p),el("small",null,(p.branch||"main")+(p.kind==="pass"?"  ·  passcode":""))),cur?el("span",{class:"tag"},"open"):el("span",{class:"muted"},ico("chev"))));
+  });
+  list.appendChild(el("div",{class:"row nav",role:"button",tabindex:"0",onclick:function(){closeAllSheets();showSetup(null);}},
+    el("span",{class:"tile"},ico("plus")),el("div",{class:"name"},"Add another repository"),el("span",{class:"muted"},ico("chev"))));
+  openSheet({title:"Switch repository",content:list,actions:[{label:"Close"}]});
+}
+function manageSheet(){
+  var sel=new Set(), list=el("div",{class:"list scroll",style:"max-height:46vh"}), del;
+  function paint(){
+    list.replaceChildren();
+    PF.list.forEach(function(p){
+      var cb=el("input",{type:"checkbox",checked:sel.has(p.id),"aria-label":"Select "+profName(p),onchange:function(){ if(cb.checked) sel.add(p.id); else sel.delete(p.id); paint(); }});
+      var cur=p.id===S.pid;
+      var row=el("div",{class:"row"+(sel.has(p.id)?" sel":"")},cb,el("span",{class:"tile"},ico("lock")),
+        el("div",{class:"name"},profName(p),cur?el("span",{class:"tag"},"open now"):null,el("small",null,(p.branch||"main")+"  ·  "+(p.kind==="pass"?"passcode":(p.kind==="device"?"no passcode":"no passcode, not encrypted")))));
+      row.addEventListener("click",function(e){ if(e.target===cb) return; if(sel.has(p.id)) sel.delete(p.id); else sel.add(p.id); paint(); });
+      list.appendChild(row);
+    });
+    if(del){ del.disabled=!sel.size; del.textContent=sel.size?"Delete "+sel.size+" selected":"Delete selected"; }
+  }
+  var all=el("label",{class:"check",style:"margin:0 0 6px"},el("input",{type:"checkbox","aria-label":"Select all",onchange:function(e){ sel.clear(); if(e.target.checked) PF.list.forEach(function(p){sel.add(p.id);}); paint(); }}),"Select all");
+  var sh=openSheet({title:"Saved repositories",content:el("div",null,all,list),actions:[
+    {label:"Close"},
+    {label:"Delete selected",kind:"danger",fn:async function(){ if(!sel.size) throw new Error("Select at least one repository."); var ids=Array.from(sel); deleteSheet(ids); }}]});
+  del=sh.btns[1]; del.disabled=true; paint();
+}
+$("connBtn").addEventListener("click",switchSheet);
+
 document.addEventListener("visibilitychange",function(){
   if(document.hidden){ hiddenAt=Date.now(); return; }
-  if(S.cfg&&hasVault()&&!S.ex.running&&!uploadBusy&&hiddenAt&&Date.now()-hiddenAt>120000) lockNow();
+  var p=curProfile();
+  if(S.cfg&&p&&p.kind==="pass"&&!S.ex.running&&!uploadBusy&&hiddenAt&&Date.now()-hiddenAt>120000) lockNow();
 });
 
 /* ================= sheets (stackable) ================= */
@@ -329,7 +539,7 @@ function resetRepo(){
 function buildIndex(){
   var idx=new Map(), dirs=new Set(); idx.set("",new Map());
   S.repo.files.forEach(function(f,p){
-    if(!S.opts.showApp&&isApp(p)) return;
+    if(S.opts.hideApp&&isApp(p)) return;
     var parts=p.split("/"), keep=parts[parts.length-1]===".gitkeep", n=keep?parts.length-1:parts.length, dir="", i, name, isFile, m, e;
     for(i=0;i<n;i++){
       name=parts[i]; isFile=(i===parts.length-1);
@@ -391,7 +601,7 @@ function goDir(path){
 }
 function renderSide(){
   var box=$("sideTree"); box.replaceChildren();
-  var r=S.repo, total=0; r.files.forEach(function(f,p){if(S.opts.showApp||!isApp(p))total+=f.size;});
+  var r=S.repo, total=0; r.files.forEach(function(f,p){if(!S.opts.hideApp||!isApp(p))total+=f.size;});
   $("sideStat").replaceChildren(el("b",null,plural(r.index.size?countVisibleFiles():0,"file")),fmt(total)+" in your repository");
   if(!r.loaded) return;
   box.appendChild(el("div",{class:"trow"+(S.lib.cwd===""?" on":""),onclick:function(){goDir("");}},el("span",{class:"tcaret"}),folderMini("/"),el("span",{class:"tn"},"All files")));
@@ -404,7 +614,7 @@ function renderSide(){
     });
   })("",0);
 }
-function countVisibleFiles(){var n=0;S.repo.files.forEach(function(f,p){if(!isKeep(p)&&(S.opts.showApp||!isApp(p)))n++;});return n;}
+function countVisibleFiles(){var n=0;S.repo.files.forEach(function(f,p){if(!isKeep(p)&&(!S.opts.hideApp||!isApp(p)))n++;});return n;}
 
 /* ================= Files tab ================= */
 function blobsUnder(sel){var out=[];S.repo.files.forEach(function(f,p){if(isSel(p,sel))out.push(p);});return out;}
@@ -414,7 +624,7 @@ function visibleRows(){
   var r=S.repo, q=S.lib.q.trim().toLowerCase(), rows=[];
   if(q){
     r.dirs.forEach(function(d){ if(d.toLowerCase().indexOf(q)>=0){var e=dirEntry(d)||{count:0,size:0}; rows.push({dir:true,path:d,count:e.count,size:e.size});} });
-    r.files.forEach(function(f,p){ if(!isKeep(p)&&(S.opts.showApp||!isApp(p))&&p.toLowerCase().indexOf(q)>=0) rows.push({dir:false,path:p,size:f.size}); });
+    r.files.forEach(function(f,p){ if(!isKeep(p)&&(!S.opts.hideApp||!isApp(p))&&p.toLowerCase().indexOf(q)>=0) rows.push({dir:false,path:p,size:f.size}); });
     rows.sort(function(a,b){return a.path.localeCompare(b.path);});
     return rows.slice(0,200);
   }
@@ -432,7 +642,7 @@ function renderLibrary(){
     return;
   }
   if(!r.loaded) return;
-  var total=0; r.files.forEach(function(f,p){if(S.opts.showApp||!isApp(p))total+=f.size;});
+  var total=0; r.files.forEach(function(f,p){if(!S.opts.hideApp||!isApp(p))total+=f.size;});
   $("libStat").textContent=plural(countVisibleFiles(),"file")+", "+fmt(total)+(r.truncated?" (list is partial)":"");
   var q=S.lib.q.trim();
   if(q){
@@ -464,7 +674,7 @@ function renderLibrary(){
     var where=q&&basename(x.path)!==x.path?x.path.slice(0,x.path.length-basename(x.path).length-1)+"  ·  "+sub:sub;
     var row=el("div",{class:"row"+(x.dir?" nav":"")+(on?" sel":"")},cb,
       x.dir?folderTile(basename(x.path)):fileTile(basename(x.path)),
-      el("div",{class:"name"},shown,el("small",null,where)),
+      el("div",{class:"name"},shown,isAppPath(x.path)?el("span",{class:"tag app",title:"Part of this app"},"app"):null,el("small",null,where)),
       x.dir?el("span",{class:"muted"},ico("chev")):null);
     row.addEventListener("click",function(e){
       if(e.target===cb) return;
@@ -578,6 +788,7 @@ $("actDel").onclick=function(){
   var content=el("div",null,
     el("p",null,"This removes "+plural(d.files,"file")+(d.folders?" across "+plural(d.folders,"folder"):"")+"."),
     el("p",{class:"muted small",style:"margin-top:6px"},"You can undo it afterwards from History."),
+    selTouchesApp()?appWarn("This includes files that make this app run. Deleting them stops the Pages site from working until you add them back."):null,
     el("ul",{class:"sumlist"},d.top.slice(0,40).map(function(p){
       return el("li",null,S.repo.dirs.has(p)?folderTile(basename(p)):fileTile(basename(p)),el("span",null,p));
     })));
@@ -628,6 +839,7 @@ function moveCopySheet(mode){
     return !isCopy&&d.top.some(function(s){return S.repo.dirs.has(s)&&(p===s||p.indexOf(s+"/")===0);});
   }});
   var content=el("div",null,
+    selTouchesApp()?appWarn("This includes files that make this app run. Moving or renaming them stops the Pages site from working until they are back."):null,
     ft?el("div",{class:"field",style:"margin-top:0"},el("span",null,isCopy?"Copy to":"Move to"),ft.el):null,
     nameIn?el("label",{class:"field"},el("span",null,"Name"),nameIn):null,
     isRen?null:el("div",{class:"field"},el("span",null,"If something is already there"),
@@ -822,7 +1034,6 @@ async function sendItems(o){
     var f=sel[i], full=ctx.join(ctx.mapped(f.path));
     ui.progress(i/sel.length); ui.status((i+1)+" of "+sel.length+": "+f.path);
     try{
-      if(f.size===0){R.empty++;ui.log("Skipped empty file: "+f.path,"warn");continue;}
       if(parentIsFile(full,files)) throw new Error("a file already uses part of this path");
       if(policy==="skip"&&(files.has(full)||dirs.has(full))){R.skipped++;continue;}
       var blob=await f.getBlob(), sha=null;
@@ -831,8 +1042,7 @@ async function sendItems(o){
       if(r.action==="same"){R.same++;continue;}
       if(r.action==="skip"){R.skipped++;continue;}
       taken.add(r.path);
-      var b64s=await toBase64(blob);
-      var res=await gh("POST",api()+"/git/blobs",{content:b64s,encoding:"base64"},true);
+      var res=await gh("POST",api()+"/git/blobs",blob.size?{content:await toBase64(blob),encoding:"base64"}:{content:"",encoding:"utf-8"},true);
       var mode=(r.action==="replace"&&files.get(r.path))?files.get(r.path).mode:"100644";
       pending.push({path:r.path,mode:mode,type:"blob",sha:res.sha}); pendingBytes+=blob.size;
       if(r.action==="replace") R.replaced++; else if(r.action==="rename"){R.renamed++;ui.log(full+" saved as "+r.path,"warn");} else R.added++;
@@ -846,7 +1056,7 @@ async function sendItems(o){
   ui.progress(1);
   var parts=[];
   if(R.added) parts.push(R.added+" added"); if(R.replaced) parts.push(R.replaced+" replaced"); if(R.renamed) parts.push(R.renamed+" saved as copies");
-  if(R.skipped) parts.push(R.skipped+" skipped"); if(R.same) parts.push(R.same+" already identical"); if(R.empty) parts.push(R.empty+" empty skipped");
+  if(R.skipped) parts.push(R.skipped+" skipped"); if(R.same) parts.push(R.same+" already identical");
   if(R.failed.length) parts.push(R.failed.length+" failed");
   R.text=(o.cancelled()?"Stopped. ":"Done. ")+(parts.length?parts.join(", "):"Nothing to send")+".";
   return R;
@@ -868,7 +1078,7 @@ $("inFiles").addEventListener("change",function(e){
 });
 function addFilesSheet(list){
   var holder={dest:S.lib.cwd}, policy=S.opts.filePolicy, limit=getLimit()*MB;
-  var items=list.map(function(f){var tooBig=f.size>=MAX_BYTES, big=tooBig||f.size>limit;return {path:f.name,size:f.size,big:big,tooBig:tooBig,checked:!big,getBlob:function(){return Promise.resolve(f);}};});
+  var items=list.map(function(f){var tooBig=f.size>=MAX_BYTES, empty=f.size===0, big=tooBig||empty||f.size>limit;return {path:f.name,size:f.size,big:big,empty:empty,tooBig:tooBig,checked:!big,getBlob:function(){return Promise.resolve(f);}};});
   var listEl=el("div",{class:"list scroll",style:"max-height:30vh"}), sumEl=el("p",{class:"muted small",style:"margin-top:8px"}), planEl=el("div",{class:"chips",style:"margin-top:8px"});
   var bar=el("i"), progress=el("div",{class:"progress",hidden:true},bar), status=el("div",{class:"status small"}), logEl=el("div",{class:"log",hidden:true});
   var cancel=false, running=false;
@@ -876,7 +1086,7 @@ function addFilesSheet(list){
     listEl.replaceChildren();
     items.forEach(function(it){
       var cb=el("input",{type:"checkbox",checked:it.checked,disabled:it.tooBig||running,"aria-label":"Include "+it.path,onchange:function(){it.checked=cb.checked;paintList();}});
-      listEl.appendChild(el("div",{class:"row"},cb,fileTile(it.path),el("div",{class:"name"},it.path,it.big?el("span",{class:"tag"+(it.tooBig?" bad":"")},it.tooBig?"too large":"large"):null,el("small",null,fmt(it.size)+(it.tooBig?"  ·  over the 100 MB limit":"")))));
+      listEl.appendChild(el("div",{class:"row"},cb,fileTile(it.path),el("div",{class:"name"},it.path,it.big?el("span",{class:"tag"+(it.tooBig?" bad":"")},it.tooBig?"too large":(it.empty?"empty":"large")):null,el("small",null,fmt(it.size)+(it.tooBig?"  ·  over the 100 MB limit":"")))));
     });
     var sel=items.filter(function(i){return i.checked;});
     sumEl.textContent=sel.length+" of "+items.length+" selected, "+fmt(sel.reduce(function(s,i){return s+i.size;},0));
@@ -1039,8 +1249,8 @@ function exBuild(){
       node=c;
     }
     var fname=parts[parts.length-1]; if(node.children.has(fname)) dupes++;
-    var tooBig=r.size>=MAX_BYTES, big=tooBig||r.size>limit;
-    node.children.set(fname,{name:fname,path:parts.join("/"),isDir:false,size:r.size,getBlob:r.getBlob,big:big,tooBig:tooBig,checked:!big,locked:r.encrypted});
+    var tooBig=r.size>=MAX_BYTES, empty=r.size===0, big=tooBig||empty||r.size>limit;
+    node.children.set(fname,{name:fname,path:parts.join("/"),isDir:false,size:r.size,getBlob:r.getBlob,empty:empty,big:big,tooBig:tooBig,checked:!big,locked:r.encrypted});
   });
   S.ex.root=root;
   var files=allFiles(root), total=files.reduce(function(s,f){return s+f.size;},0), info="";
@@ -1084,7 +1294,7 @@ function exWalk(node,depth,frag){
     }else{
       cb.checked=k.checked; cb.disabled=k.tooBig;
       cb.onchange=function(){k.checked=cb.checked;exRender();};
-      var nm=el("div",{class:"name",style:"cursor:pointer",title:"Preview",onclick:function(){previewExtract(k);}},k.name,k.locked?el("span",{class:"tag"},"password"):null,k.big?el("span",{class:"tag"+(k.tooBig?" bad":"")},k.tooBig?"too large":"large"):null,el("small",null,fmt(k.size)));
+      var nm=el("div",{class:"name",style:"cursor:pointer",title:"Preview",onclick:function(){previewExtract(k);}},k.name,k.locked?el("span",{class:"tag"},"password"):null,k.big?el("span",{class:"tag"+(k.tooBig?" bad":"")},k.tooBig?"too large":(k.empty?"empty":"large")):null,el("small",null,fmt(k.size)));
       row.append(el("span",{class:"sp"}),cb,fileTile(k.name),nm); frag.appendChild(row);
     }
   });
@@ -1092,10 +1302,12 @@ function exWalk(node,depth,frag){
 function exSkipped(){
   var big=allFiles(S.ex.root).filter(function(f){return f.big;}), box=$("skipped"); box.replaceChildren();
   $("skipbox").hidden=!big.length;
-  $("skipsum").textContent="Held back for size: "+big.length+" over "+getLimit()+" MB";
+  var nEmpty=big.filter(function(f){return f.empty;}).length, nBig=big.length-nEmpty, bits=[];
+  if(nBig) bits.push(nBig+" over "+getLimit()+" MB"); if(nEmpty) bits.push(nEmpty+" empty");
+  $("skipsum").textContent="Held back: "+bits.join(", ")+". Tick any you want to include.";
   big.sort(function(a,b){return a.path.localeCompare(b.path);}).forEach(function(f){
     var cb=el("input",{type:"checkbox",checked:f.checked,disabled:f.tooBig,"aria-label":"Include "+f.name,onchange:function(){f.checked=cb.checked;exRender();}});
-    box.appendChild(el("div",{class:"row"},cb,fileTile(f.name),el("div",{class:"name"},f.path,el("small",null,fmt(f.size)+(f.tooBig?"  ·  over the 100 MB limit, can't be sent":"")))));
+    box.appendChild(el("div",{class:"row"},cb,fileTile(f.name),el("div",{class:"name"},f.path,el("small",null,(f.empty?"empty file":fmt(f.size))+(f.tooBig?"  ·  over the 100 MB limit, can't be sent":"")))));
   });
 }
 function exSelected(){return allFiles(S.ex.root).filter(function(f){return f.checked&&!f.tooBig;}).sort(function(a,b){return a.path.localeCompare(b.path);});}
@@ -1103,7 +1315,7 @@ function exSummary(){
   if(!S.ex.root) return;
   var fs=allFiles(S.ex.root), sel=fs.filter(function(f){return f.checked;}), bytes=sel.reduce(function(s,f){return s+f.size;},0);
   var big=sel.filter(function(f){return f.big;}).length;
-  $("summary").textContent=sel.length+" of "+fs.length+" selected, "+fmt(bytes)+(big?", including "+big+" large":"");
+  $("summary").textContent=sel.length+" of "+fs.length+" selected, "+fmt(bytes)+(big?", including "+big+" held back":"");
   $("go").disabled=!sel.length||S.ex.running||S.ex.locked.some(function(l){return l.kind==="zip";});
 }
 function upPreview(){
@@ -1148,7 +1360,7 @@ $("optStrip").addEventListener("change",function(){S.opts.strip=$("optStrip").ch
 $("optLimit").addEventListener("change",function(){
   S.opts.limit=getLimit();savePrefs();
   if(!S.ex.root) return; var limit=getLimit()*MB;
-  allFiles(S.ex.root).forEach(function(f){var big=f.tooBig||f.size>limit;if(big!==f.big){f.big=big;f.checked=!big;}});
+  allFiles(S.ex.root).forEach(function(f){var big=f.tooBig||f.empty||f.size>limit;if(big!==f.big){f.big=big;f.checked=!big;}});
   exRender();
 });
 $("selAll").onclick=function(){allFiles(S.ex.root).forEach(function(f){if(!f.big)f.checked=true;});exRender();};
@@ -1194,6 +1406,9 @@ $("go").onclick=async function(){
 var EXT_LEGACY={doc:"docx",xls:"xlsx",ppt:"pptx"};
 var APP_FILES=["index.html","sw.js","manifest.webmanifest",".nojekyll"];
 function isApp(p){return APP_FILES.indexOf(p)>=0||p.indexOf("app/")===0;}
+function isAppPath(p){return p==="app"||isApp(p);}
+function selTouchesApp(){var hit=false;S.lib.sel.forEach(function(p){if(isAppPath(p))hit=true;});return hit;}
+function appWarn(t){return el("div",{class:"warnbox"},t);}
 function extOf(n){n=basename(n);var i=n.lastIndexOf(".");return i<=0?"":n.slice(i+1).toLowerCase();}
 function isLegacy(p){return !!EXT_LEGACY[extOf(p)];}
 function hasLegacy(){if(!S.lib.sel.size||!S.repo.loaded)return false;var found=false;S.repo.files.forEach(function(f,p){if(!found&&isSel(p,S.lib.sel)&&isLegacy(p))found=true;});return found;}
@@ -1376,18 +1591,17 @@ function switchRow(label,checked,onChange,hint){
 }
 $("menuBtn").innerHTML=svg("dots");
 $("menuBtn").addEventListener("click",function(){
-  var saved=hasVault();
   var list=el("div",{style:"display:grid;gap:6px"},
-    switchRow("Show app files",!!S.opts.showApp,function(v){S.opts.showApp=v;savePrefs();buildIndex();renderLibrary();renderSide();},"The files that make this app run (index.html and the app folder). Hidden by default so they aren't changed by accident."),
+    switchRow("Show app files",!S.opts.hideApp,function(v){S.opts.hideApp=!v;savePrefs();buildIndex();renderLibrary();renderSide();},"The files that make this app run (index.html and the app folder). They show with an app tag. Be careful changing them."),
     switchRow("Keep opened files for offline use",!!S.opts.offline,function(v){S.opts.offline=v;savePrefs();if(!v)clearOffline();},"Saves files you open on this device, unencrypted, so they open without a connection. Turn off on a shared device."),
     el("div",{style:"display:grid;gap:10px;margin-top:8px"},
       deferredInstall?el("button",{class:"btn block",type:"button",onclick:function(){closeAllSheets();deferredInstall.prompt();deferredInstall=null;}},"Install this app"):null,
-      el("button",{class:"btn block",type:"button",onclick:function(){closeAllSheets();lockNow();}},ico("lock"),saved?"Lock":"Sign out"),
-      el("button",{class:"btn block",type:"button",onclick:function(){closeAllSheets();showSetup(true);}},"Edit details"),
+      el("button",{class:"btn block",type:"button",onclick:function(){closeAllSheets();switchSheet();}},ico("sort"),"Switch repository"),
+      el("button",{class:"btn block",type:"button",onclick:function(){closeAllSheets();showSetup(S.pid);}},"Edit details"),
+      el("button",{class:"btn block",type:"button",onclick:function(){closeAllSheets();manageSheet();}},"Saved repositories"),
+      el("button",{class:"btn block",type:"button",onclick:function(){closeAllSheets();lockNow();}},ico("lock"),"Log out"),
       el("button",{class:"btn block",type:"button",onclick:async function(){await clearOffline();toast("Offline files cleared");}},"Clear offline files"),
-      el("button",{class:"btn block",type:"button",style:"color:var(--danger)",onclick:function(){
-        closeAllSheets();try{localStorage.removeItem(VK);}catch(e){} clearOffline(); S.cfg=null;S.pass=null;resetRepo();showSetup(false);
-      }},"Forget this device")));
+      el("button",{class:"btn block",type:"button",style:"color:var(--danger)",onclick:function(){closeAllSheets();resetDeviceSheet();}},"Reset this device")));
   openSheet({title:"Menu",content:list,actions:[{label:"Close"}]});
 });
 if("serviceWorker" in navigator&&/^https?:/.test(location.protocol)){ window.addEventListener("load",function(){navigator.serviceWorker.register("sw.js").catch(function(){});}); }
@@ -1399,5 +1613,5 @@ async function previewExtract(k){
 }
 /* ================= boot ================= */
 loadPrefs(); buildSegs(); hydrateIcons();
-if(hasVault()){ showScreen("s-lock"); $("lockPass").focus(); } else showSetup(false);
+migrateOld(); PF=readStore(); showHome();
 })();
