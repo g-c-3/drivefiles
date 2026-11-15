@@ -46,15 +46,17 @@ app/            ← scripts, styles, viewers, converters, licences
 3. In the repository: Settings → Pages → *Deploy from a branch* → `main` / root.
 4. Wait a minute, then open **<https://g-c-3.github.io/githubmanager/>** and reload once.
 
-The app files are hidden in the file list so you don't change them by accident. Turn on **Menu → Show app files** to see them.
+The app files show in the file list with a small **app** tag, and Delete and Move warn you if the selection includes them. If you'd rather not see them, turn off **Menu → Show app files**.
 
 > [!NOTE]
 > You can add more files to `app/` later. The app loads its pieces only when needed, so opening a PDF loads the PDF engine and nothing else. No part of it depends on an outside server.
 
 ## Getting started
 
+The first screen has three things: **Add**, a **Saved** list, and **Login**.
+
 1. Create a **fine-grained personal access token** at GitHub → Settings → Developer settings → Personal access tokens. Choose only this repository and give it **Contents: Read and write**.
-2. Open the app and fill in:
+2. Tap **Add** and fill in:
 
    | Field | Example |
    |---|---|
@@ -62,11 +64,28 @@ The app files are hidden in the file list so you don't change them by accident. 
    | Repo Name | `githubmanager` |
    | Branch (optional) | `main` |
    | Read & Write Access Token | `github_pat_…` |
-   | Passcode (recommended) | your own |
+   | Passcode (optional) | your own |
 
-3. Tap **Continue**. The first screen is the file manager for your repo.
+3. Tap **Save** (back to the first screen) or **Save and open**. Atlas checks the token against GitHub before it saves anything.
+4. Next time, pick the repository in **Saved** and tap **Login**. Atlas remembers the one you used last.
 
-With a passcode, your details are stored on this device only, encrypted (PBKDF2-SHA256, 200,000 rounds, AES-256-GCM). Without one, nothing is saved.
+### Several repositories
+
+Add as many as you like. **Saved** lists them as `account/repo`, is greyed out until you save the first one, and Login stays off until then. Inside the app:
+
+- Tap the repository name at the top, or **Menu → Switch repository**, to change repository.
+- **Menu → Saved repositories** lets you tick one or several and delete them. You must type `confirm` first.
+- **Menu → Edit details** changes the open repository's name, branch, token or passcode.
+- **Reset this device** (on the first screen, and in the Menu) removes every saved repository, token and setting, and clears offline files. It also asks you to type `confirm`.
+
+### Passcode or not
+
+| | Login | How the token is kept |
+|---|---|---|
+| **With a passcode** | Asks for it first | Encrypted with your passcode (PBKDF2-SHA256, 200,000 rounds, AES-256-GCM). Nobody can open it without the passcode, including you if you forget it. Delete the entry and add it again |
+| **Without** | Opens the repository straight away | Encrypted with a key that this browser keeps and can't export. This stops the token sitting there as readable text. **It doesn't stop someone who is using this browser profile**, since anyone who can open Atlas here can log in. Use a passcode on shared devices |
+
+Each saved repository chooses for itself. Your details never leave the device except to GitHub.
 
 ## Files tab
 
@@ -154,7 +173,7 @@ For folders: **Merge** puts new files in the existing folder, **Save as copy** c
 ## Limits
 
 - **100 MB** per file through GitHub's API; larger files are marked and can't be sent.
-- Files above **48 MB** (adjustable) are held back during extraction until you opt in.
+- Files above **48 MB** (adjustable) are held back during extraction until you opt in. **Empty files** are held back too: they are unticked by default, and sent if you tick them in the *Held back* list.
 - Everything is processed in memory. Very large archives, PDFs or documents can fail on a phone.
 - Documents above 60 MB and text above 20 MB aren't opened in the viewer; download them.
 - GitHub rate-limits writes. Atlas paces itself and waits when asked.
@@ -166,15 +185,15 @@ For folders: **Merge** puts new files in the existing folder, **Save as copy** c
 - No server, analytics or outside requests. Atlas talks only to `api.github.com` and its own files.
 - Markdown and Word content is sanitised. HTML previews run in a locked sandbox. Pictures hosted on outside sites in Markdown are **not loaded**.
 - Use a fine-grained token limited to this one repository, and revoke it if a device is lost.
-- This page is public, but it contains no secrets. Strangers see only the setup form.
-- **Lock** and **Forget this device** are in the menu. The app also locks after two minutes in the background.
+- This page is public, but it contains no secrets. Strangers see only the first screen with nothing saved.
+- **Log out** and **Reset this device** are in the menu. A repository saved with a passcode logs out after two minutes in the background.
 
 ## Troubleshooting
 
 | Message | Fix |
 |---|---|
 | "Couldn't load app/…" | The `app` folder is missing from the repo root. Extract `atlas-site.zip` again |
-| Token was rejected | Edit details and paste a valid token |
+| Token was rejected | Menu → Edit details, and paste a valid token |
 | Repository or branch not found | Check spelling, and that the token covers this repo |
 | No permission | The token needs **Contents: Read and write** |
 | Repository is empty | Add one file in GitHub first, for example a README |
