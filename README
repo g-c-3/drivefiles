@@ -1,1 +1,139 @@
-https://g-c-3.github.io/drivefiles/
+<div align="center">
+
+# 🌐 [**Open Atlas → g-c-3.github.io/drivefiles**](https://g-c-3.github.io/drivefiles/)
+
+[![Open the app](https://img.shields.io/badge/%E2%96%B6%20OPEN%20THE%20APP-g--c--3.github.io%2Fdrivefiles-6366f1?style=for-the-badge&labelColor=0b1020)](https://g-c-3.github.io/drivefiles/)
+
+</div>
+
+> [!IMPORTANT]
+> **App link: <https://g-c-3.github.io/drivefiles/>**
+> Open it on your phone, tablet or computer. Everything runs in your browser; there is no server.
+
+---
+
+## What it is
+
+**Atlas** is a single-page file manager for one GitHub repository. It runs entirely in your browser from GitHub Pages and talks to GitHub directly with your own access token. Use it to:
+
+- browse, select, copy, move, rename, delete and download the repository's files and folders,
+- upload files into any folder,
+- **extract archives straight into a folder** (ZIP, 7z, RAR, TAR, GZ, BZ2, XZ and more), including password-protected ones,
+- download any selection as one **zip, with or without a password**,
+- undo the latest change from History.
+
+It adapts to phones, foldables, tablets and desktops: bottom tabs on narrow screens, a sidebar with a folder tree from about 640 px, and a windowed layout on large screens. Light and dark themes follow your device, and animations respect "reduce motion".
+
+## Quick start
+
+1. Create a **fine-grained personal access token** at GitHub → Settings → Developer settings → Personal access tokens. Select only the repository `drivefiles` and grant **Contents: Read and write**.
+2. Open **<https://g-c-3.github.io/drivefiles/>**.
+3. Fill in:
+
+   | Field | Example |
+   |---|---|
+   | GitHub Account Name | `g-c-3` |
+   | Repo Name | `drivefiles` |
+   | Branch (optional) | `main` |
+   | Read & Write Access Token | `github_pat_…` |
+   | Passcode (recommended) | your own |
+
+4. Tap **Continue**. The first screen is the file manager for your repo.
+
+> [!NOTE]
+> With a passcode, your details are stored on **this device only**, encrypted (PBKDF2-SHA256, 200,000 rounds, AES-256-GCM). Next time you just enter the passcode. Without a passcode nothing is saved.
+
+## The three tabs
+
+### Files
+- Tap a folder to open it, tick checkboxes (or **Select all**) to pick items.
+- The action bar appears with **Download · Copy · Move · Rename · Delete**.
+- **Add files** uploads to the current folder; **Change** opens a file-manager style folder picker where you can also create folders.
+- **New folder** creates a folder (Git has no empty folders, so a hidden `.gitkeep` is added and never shown).
+- Search matches file and folder names anywhere in the repo.
+
+### Extract
+1. Drop or choose one or more archives.
+2. If an archive is locked, a **Password needed** card appears. Enter the password and tap **Unlock**.
+3. Tick the folders or files you want. Large files are held back (see limits).
+4. Pick the destination folder with the picker, choose how to handle duplicates, tap **Extract selected**.
+
+Progress is committed in batches, so if the connection drops you can run it again and finished files are skipped.
+
+### History
+Every change is a Git commit. **Undo this change** on the newest entry restores the previous state (the undo is itself a commit, so you can undo it too).
+
+## Supported archives
+
+| Format | Open | Password |
+|---|---|---|
+| ZIP (ZipCrypto and AES-128/192/256) | ✅ | ✅ |
+| 7z (including encrypted file names) | ✅ | ✅ |
+| TAR, TAR.GZ / TGZ, TAR.BZ2, TAR.XZ | ✅ | n/a |
+| GZ, BZ2, XZ (single file) | ✅ | n/a |
+| RAR | ✅ via 7-Zip's RAR support | ✅ |
+| Others 7-Zip reads (ISO, CAB, WIM, …) | ✅ | where the format has one |
+
+> [!NOTE]
+> ZIP, 7z, TAR, GZ, BZ2 and XZ were tested end to end. RAR support comes from the bundled 7-Zip engine but I had no RAR sample to test with, so treat it as untested.
+
+## Downloading
+
+- One file: downloads directly.
+- Several items or a folder: packed into one `.zip` in your browser. Optionally set a **password**:
+  - **Strong (AES-256)**: opens in 7-Zip, WinZip, and most Android apps.
+  - **Compatible (ZipCrypto)**: opens almost everywhere, but is much weaker.
+
+## When a file already exists
+
+| File option | Result |
+|---|---|
+| **Skip** | Leave the existing file alone |
+| **Keep both** | Save the new one as `name_1`, `name_2`, … (identical files are detected and not duplicated) |
+| **Replace** | Overwrite (undo from History) |
+
+| Folder option | Result |
+|---|---|
+| **Merge** | Put new files into the existing folder |
+| **Save as copy** | Save the folder as `Folder_1`, `Folder_2`, … |
+
+## Limits worth knowing
+
+- **100 MB** per file is GitHub's hard limit through this route; larger files are marked and can't be sent.
+- Files above **48 MB** (adjustable) are held back by default so you can opt in one by one.
+- Everything is processed in memory. Very large archives (hundreds of MB) can fail on a phone; split them or use a computer.
+- GitHub rate-limits writes. The app paces itself and waits when asked.
+- Keep the tab open and the screen on while a long job runs.
+
+## Privacy and security
+
+- No server, analytics or third-party requests. The page only talks to `api.github.com`.
+- Your token is used only in requests to GitHub. Use a fine-grained token limited to this one repo, and revoke it if a device is lost.
+- This page is public because Pages is public, but it contains no secrets. Strangers see only the setup form and can't see your files without a token.
+- **Lock** and **Forget this device** are in the menu (⋯). The app also locks after two minutes in the background.
+
+## Troubleshooting
+
+| Message | Fix |
+|---|---|
+| Token was rejected | Edit details and paste a valid token |
+| Repository or branch not found | Check the account, repo and branch spelling, and that the token covers this repo |
+| No permission | The token needs **Contents: Read and write** |
+| Repository is empty | Add one file in GitHub (for example a README) first |
+| Password didn't work | Check case and spaces; names can be encrypted in 7z |
+| Extraction fails on a big archive | Close other tabs, or use a computer |
+
+## Notes on layout
+
+The layout is responsive and works on foldable phones in both folded and unfolded widths. It does not read the hinge position, so it will not split around the fold.
+
+## Credits and licences
+
+- [**7-Zip**](https://www.7-zip.org/) compiled to WebAssembly in the [`7z-wasm`](https://www.npmjs.com/package/7z-wasm) package (7-Zip 24.09): LGPL, with the **unRAR restriction** (the RAR code may not be used to recreate the RAR compression algorithm).
+- [**zip.js**](https://gildas-lormeau.github.io/zip.js/) 2.25.0: BSD-3-Clause.
+
+Both are bundled into the single `index.html`, so the app needs no other files.
+
+## Deploying
+
+Put `index.html` in the repository root, then Settings → Pages → *Deploy from a branch* → `main` / root. The app is then served at `https://g-c-3.github.io/drivefiles/`.
