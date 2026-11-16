@@ -41,6 +41,8 @@ var ICONS={
  convert:'<path d="M4 7h13l-3-3"/><path d="M20 17H7l3 3"/>',
  info:'<circle cx="12" cy="12" r="9"/><path d="M12 11v6"/><path d="M12 7.5v.01"/>',
  back:'<path d="m15 5-7 7 7 7"/>',
+ upload:'<path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M5 20h14"/>',
+ fileplus:'<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M12 12v5M9.5 14.5h5"/>',
  pencil:'<path d="M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16z"/><path d="m13.5 6.5 4 4"/>'
 };
 function svg(n,sw){return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="'+(sw||1.8)+'" stroke-linecap="round" stroke-linejoin="round">'+ICONS[n]+'</svg>';}
@@ -119,43 +121,59 @@ var S={
   ex:{readers:[],items:[],errors:[],root:null,locked:[],dest:"",destTouched:false,running:false,cancel:false,opening:false},
   lib:{cwd:"",sel:new Set(),q:"",exp:new Set()},
   act:{loaded:false,list:[]},
-  opts:{filePolicy:"skip",folderPolicy:"merge",strip:false,limit:49,sortKey:"name",sortDir:"asc",hideApp:false,offline:false}
+  opts:{filePolicy:"skip",folderPolicy:"merge",strip:false,limit:50,splitPdf:true,forceSame:false,theme:"dark",sortKey:"name",sortDir:"asc",hideApp:false,offline:false}
 };
 var VK="a_vault", PK="a_prefs", lastWrite=0, hiddenAt=0;
 
 /* ================= back button / gesture ================= */
 /* Every in-app step (a sheet, a viewer, a folder, a tab, a screen) is one entry in this stack, mirrored by one browser history entry.
-   Back closes the newest step instead of leaving the site. */
-var Nav={st:[],hd:0,pend:false,t:null,g:null,lastRoot:0};
+   Below them sits one guard entry, so the first Back on the very first screen stays in the app and a second quick Back leaves. */
+var Nav={st:[],hd:0,armed:false,pend:false,t:null,g:null,lastRoot:0,lastExit:0};
+Nav.want=function(){return Nav.armed?Nav.st.length+1:0;};
 Nav.push=function(close,kind){var e={close:close,kind:kind||""};Nav.st.push(e);Nav.sched();return e;};
 Nav.drop=function(e){var i=Nav.st.indexOf(e);if(i>=0){Nav.st.splice(i,1);Nav.sched();}};
 Nav.dropKind=function(k){var n=Nav.st.length;Nav.st=Nav.st.filter(function(e){return e.kind!==k;});if(Nav.st.length!==n)Nav.sched();};
 Nav.has=function(k){return Nav.st.some(function(e){return e.kind===k;});};
 Nav.clear=function(){if(Nav.st.length){Nav.st=[];Nav.sched();}};
 Nav.sched=function(){if(!Nav.t)Nav.t=setTimeout(Nav.sync,0);};
+Nav.move=function(to){
+  if(to===Nav.hd){Nav.sched();return;}
+  Nav.pend=true; var by=to-Nav.hd; Nav.hd=to;
+  try{ history.go(by); }catch(e){ Nav.pend=false; }
+  clearTimeout(Nav.g); Nav.g=setTimeout(function(){Nav.pend=false;Nav.sched();},700);
+};
 Nav.sync=function(){
-  Nav.t=null; if(Nav.pend) return;
-  var want=Nav.st.length;
+  Nav.t=null; if(Nav.pend||!Nav.armed) return;
+  var want=Nav.want();
   try{
     if(want>Nav.hd){ while(Nav.hd<want){Nav.hd++;history.pushState({atlas:1,d:Nav.hd},"");} }
-    else if(want<Nav.hd){
-      Nav.pend=true; var by=want-Nav.hd; Nav.hd=want; history.go(by);
-      Nav.g=setTimeout(function(){Nav.pend=false;Nav.sched();},700);
-    }
+    else if(want<Nav.hd) Nav.move(want);
   }catch(e){ Nav.pend=false; }
 };
+/* The guard is added on the first tap or key press, because browsers skip history entries that a page adds without any interaction. */
+Nav.arm=function(){ if(Nav.armed) return; Nav.armed=true; Nav.sched(); };
+["pointerup","touchend","keydown","click"].forEach(function(ev){window.addEventListener(ev,Nav.arm,{capture:true,passive:true});});
 window.addEventListener("popstate",function(e){
   if(Nav.pend){ Nav.pend=false; clearTimeout(Nav.g); Nav.sched(); return; }
   var d=(e.state&&e.state.d)||0; Nav.hd=d;
-  while(Nav.st.length>d){
+  if(!Nav.armed) return;
+  if(d<1){
+    /* Back from the first screen: stay unless it is pressed twice in a row */
+    var now=Date.now();
+    if(now-Nav.lastExit<2500){ Nav.armed=false; history.back(); return; }
+    Nav.lastExit=now; toast("Press back again to leave");
+    Nav.move(Nav.want()); return;
+  }
+  while(Nav.st.length>d-1){
     var top=Nav.st.pop(), r;
     try{ r=top.close(); }catch(x){ r=undefined; }
     if(r===false){ Nav.st.push(top); break; }
   }
-  Nav.sched();
+  if(Nav.want()>d) Nav.move(Nav.want()); else Nav.sched();
 });
 window.AtlasNav=Nav;
-Nav.hd=(history.state&&history.state.d)||0; Nav.sched();
+Nav.hd=(history.state&&history.state.d)||0;
+if(Nav.hd>0){ Nav.armed=true; Nav.sched(); }
 function sessionBack(){
   if(S.ex.running||uploadBusy){ toast("A job is still running. Stop it first, or wait for it to finish.",true); return false; }
   var now=Date.now();
@@ -238,7 +256,7 @@ async function openProfile(p,pass){
   if(p.kind==="device"){ var k=await deviceKey(false); if(!k) throw new Error("key missing"); return openWith(k,p.enc); }
   return openWith(await deriveKey(pass,unb64(p.enc.s)),p.enc);
 }
-function loadPrefs(){try{Object.assign(S.opts,JSON.parse(localStorage.getItem(PK)||"{}"));}catch(e){} if(S.opts.limit===48) S.opts.limit=49; S.opts.folderPolicy="merge";}
+function loadPrefs(){try{Object.assign(S.opts,JSON.parse(localStorage.getItem(PK)||"{}"));}catch(e){} if(S.opts.limit===48||S.opts.limit===49) S.opts.limit=50; S.opts.folderPolicy="merge";}
 function savePrefs(){try{localStorage.setItem(PK,JSON.stringify(S.opts));}catch(e){}}
 
 /* ================= screens ================= */
@@ -354,7 +372,7 @@ function resetDeviceSheet(){
       }catch(e){}
       try{ indexedDB.deleteDatabase("atlas-keys"); }catch(e){}
       try{ await clearOffline(); }catch(e){}
-      PF={v:2,last:null,list:[]}; S.opts=JSON.parse(JSON.stringify(OPT_DEFAULTS)); buildSegs();
+      PF={v:2,last:null,list:[]}; S.opts=JSON.parse(JSON.stringify(OPT_DEFAULTS)); applyTheme(S.opts.theme,true); buildSegs();
       a.close(); closeAllSheets(); S.cfg=null; S.pass=null; S.pid=null; resetRepo();
       showHome(); toast("This device was reset");
     }});
@@ -632,8 +650,8 @@ async function commitEntries(entries,message,prog){
 }
 function enterApp(){
   showScreen("shell"); buildTabs(); hydrateIcons();
-  S.lib.sel.clear(); S.lib.cwd=""; S.lib.q=""; $("libSearch").value=""; S.ex.destTouched=false; S.ex.dest="";
-  $("connName").textContent=S.cfg.repo; $("connDot").classList.remove("off");
+  S.lib.sel.clear(); S.lib.cwd=""; S.lib.q=""; $("libSearch").value=""; $("searchWrap").classList.remove("open"); $("searchWrap").inert=true; $("searchBtn").classList.remove("on"); S.ex.destTouched=false; S.ex.dest="";
+  $("connName").textContent=S.cfg.repo; $("connDot").classList.remove("off"); fitConn();
   Nav.dropKind("view"); setTabRaw("files"); loadRepo();
 }
 
@@ -762,8 +780,8 @@ $("actMove").append(ico("move"),lbl("Move"));
 $("actRename").append(ico("pencil"),lbl("Rename"));
 $("actDel").append(ico("trash"),lbl("Delete"));
 $("actClear").appendChild(ico("x"));
-$("newFolder").append(ico("folderplus"),"New folder");
-$("addFiles").append(ico("plus"),"Add files");
+$("newFolder").append(ico("folderplus"));
+$("addFiles").append(ico("upload"));
 $("actClear").onclick=function(){S.lib.sel.clear();renderLibrary();};
 $("libRefresh").innerHTML=svg("refresh");
 $("libRefresh").onclick=function(){loadRepo();};
@@ -961,38 +979,65 @@ $("actDownload").onclick=async function(){
   }
   zipDownloadSheet(d,paths);
 };
-function zipDownloadSheet(d,paths){
+async function zipDownloadSheet(d,paths){
+  if(paths.some(function(p){return / pages\d+to\d+\.pdf$/i.test(p);})){ try{ await loadScript("app/pdftools.js"); }catch(e){} }
+  var mplan=window.AtlasPdf?window.AtlasPdf.planMerge(paths):{groups:[],rest:paths};
+  var restNames=new Set(mplan.rest.map(entryName));
+  mplan.groups=mplan.groups.filter(function(g){return !restNames.has(entryName(g.out));});
+  var joined=new Set(); mplan.groups.forEach(function(g){g.parts.forEach(function(p){joined.add(p);});});
+  var apart=paths.filter(function(p){return !joined.has(p)&&window.AtlasPdf&&window.AtlasPdf.parsePart(basename(p));});
   var total=0; paths.forEach(function(p){total+=S.repo.files.get(p).size;});
   var nameIn=el("input",{value:d.top.length===1?basename(d.top[0]):"download",autocapitalize:"off",autocomplete:"off",spellcheck:"false"});
   var pwIn=el("input",{type:"password",placeholder:"Leave empty for no password",autocomplete:"new-password",autocapitalize:"off",spellcheck:"false"});
   var eye=el("button",{type:"button",class:"ibtn","aria-label":"Show or hide password",onclick:function(){var s=pwIn.type==="password";pwIn.type=s?"text":"password";eye.innerHTML=svg(s?"eyeoff":"eye");}});
   eye.innerHTML=svg("eye");
-  var mode="aes";
+  var mode="aes", joinOn=true;
   var bar=el("i"), progress=el("div",{class:"progress",hidden:true},bar), status=el("div",{class:"status small"});
+  var joinBox=null;
+  if(mplan.groups.length){
+    var cb=el("input",{type:"checkbox",checked:true,onchange:function(){joinOn=cb.checked;joinList.hidden=!joinOn;}});
+    var joinList=el("ul",{class:"sumlist",style:"margin:6px 0 0 34px"},
+      mplan.groups.map(function(g){return el("li",null,fileTile(g.out),el("span",null,basename(g.out)+"  ←  "+plural(g.parts.length,"part")));}));
+    joinBox=el("div",{class:"joinbox"},
+      el("label",{class:"check"},cb,"Join continuous PDF parts"),
+      el("p",{class:"hint",style:"margin:0 0 0 34px"},"Parts of the same PDF whose page numbers follow on are joined into one file in the zip. Your files in the repository aren't changed."),
+      joinList,
+      apart.length?el("p",{class:"hint",style:"margin:8px 0 0 34px"},apart.map(basename).join(", ")+(apart.length>1?" stay":" stays")+" separate because the pages aren't continuous."):null);
+  }
   var content=el("div",null,
     el("p",{class:"muted"},plural(paths.length,"file")+", "+fmt(total)+" will be packed into one zip file."),
+    joinBox,
     el("label",{class:"field"},el("span",null,"File name"),nameIn),
     el("label",{class:"field"},el("span",null,"Password",el("i",null,"optional")),el("div",{class:"pw"},pwIn,eye)),
     el("div",{class:"field"},el("span",null,"Protection"),seg([["aes","Strong (AES-256)"],["zc","Compatible"]],mode,function(v){mode=v;})),
     el("p",{class:"hint"},"Strong works with 7-Zip, WinZip, and most Android apps. Choose Compatible if a built-in phone or Mac extractor can't open it; it is much weaker. Without a password, none of this applies."),
     total>400*MB?el("p",{class:"hint",style:"color:var(--warn)"},"This is a large download. It is built in memory, so it can fail on a phone."):null,
     progress,status);
-  var sh=openSheet({title:"Download as zip",content:content,actions:[
+  openSheet({title:"Download as zip",content:content,actions:[
     {label:"Cancel"},
     {label:"Download",kind:"primary",fn:async function(a){
       var nm=(nameIn.value.trim()||"download").replace(/[\\\/:*?"<>|]+/g,"_"), pw=pwIn.value;
       progress.hidden=false; progress.classList.add("run"); a.lock(true);
       var opts={};
       if(pw){ opts.password=pw; if(mode==="zc") opts.zipCrypto=true; else opts.encryptionStrength=3; }
-      await needZip(); var zw=new zip.ZipWriter(new zip.BlobWriter("application/zip"),opts), done=0, i, chunk;
+      var items=[];
+      if(joinOn&&mplan.groups.length){
+        await loadScript("app/vendor/pdflib.js"); await loadScript("app/pdftools.js");
+        paths.forEach(function(p){ if(!joined.has(p)) items.push({name:entryName(p),get:function(){return blobBySha(S.repo.files.get(p).sha);}}); });
+        mplan.groups.forEach(function(g){
+          items.push({name:entryName(g.out),get:async function(){
+            status.textContent="Joining "+basename(g.out);
+            var bl=[]; for(var q=0;q<g.parts.length;q++) bl.push(await blobBySha(S.repo.files.get(g.parts[q]).sha));
+            return window.AtlasPdf.merge(bl);
+          }});
+        });
+      }else paths.forEach(function(p){ items.push({name:entryName(p),get:function(){return blobBySha(S.repo.files.get(p).sha);}}); });
+      await needZip(); var zw=new zip.ZipWriter(new zip.BlobWriter("application/zip"),opts), done=0, i;
       try{
-        for(i=0;i<paths.length;i+=4){
-          chunk=paths.slice(i,i+4);
-          var blobs=await Promise.all(chunk.map(function(p){return blobBySha(S.repo.files.get(p).sha);}));
-          for(var j=0;j<chunk.length;j++){
-            await zw.add(entryName(chunk[j]),new zip.BlobReader(blobs[j])); done++;
-            bar.style.width=Math.round(done/paths.length*100)+"%"; status.textContent=done+" of "+paths.length;
-          }
+        for(i=0;i<items.length;i++){
+          var bl2=await items[i].get();
+          await zw.add(items[i].name,new zip.BlobReader(bl2)); done++;
+          bar.style.width=Math.round(done/items.length*100)+"%"; status.textContent=done+" of "+items.length;
         }
         var out=await zw.close();
         saveBlob(out,nm+".zip"); progress.classList.remove("run"); a.lock(false); a.close();
@@ -1075,39 +1120,62 @@ function toBase64(blob){
   return new Promise(function(res,rej){var r=new FileReader();r.onload=function(){res(String(r.result).split(",")[1]||"");};r.onerror=function(){rej(r.error);};r.readAsDataURL(blob);});
 }
 async function sendItems(o){
-  var sel=o.sel, policy=o.filePolicy, ui=o.ui;
+  var sel=o.sel, policy=o.filePolicy, ui=o.ui, force=!!o.forceSame&&policy==="replace";
   await readRepoState();
   var files=S.repo.files, dirs=S.repo.dirs, headSha, treeSha;
   var ref=await gh("GET",api()+"/git/ref/heads/"+bp()); headSha=ref.object.sha;
   var cm=await gh("GET",api()+"/git/commits/"+headSha); treeSha=cm.tree.sha;
   var ctx=makeCtx(sel,o.dest,o.folderPolicy), taken=new Set();
-  var pending=[], pendingBytes=0, batchNo=0, R={added:0,replaced:0,renamed:0,same:0,skipped:0,empty:0,failed:[]};
+  var pending=[], pendingBytes=0, batchNo=0, R={added:0,replaced:0,renamed:0,same:0,skipped:0,split:0,parts:0,failed:[]};
   async function commitBatch(){
     if(!pending.length) return; batchNo++;
-    var t=await gh("POST",api()+"/git/trees",{base_tree:treeSha,tree:pending},true);
+    var t=await gh("POST",api()+"/git/trees",{base_tree:treeSha,tree:pending.map(function(p){return {path:p.path,mode:p.mode,type:p.type,sha:p.sha};})},true);
+    if(t.sha===treeSha){
+      ui.log("Part "+batchNo+": the content is the same as what is already saved, so there was nothing to commit.","ok");
+      pending=[]; pendingBytes=0; return;
+    }
     var c=await gh("POST",api()+"/git/commits",{message:"Add "+plural(pending.length,"file")+" (part "+batchNo+")",tree:t.sha,parents:[headSha]},true);
     await gh("PATCH",api()+"/git/refs/heads/"+bp(),{sha:c.sha},true);
     treeSha=t.sha; headSha=c.sha;
-    pending.forEach(function(p){files.set(p.path,{sha:p.sha,mode:p.mode,size:0});});
+    pending.forEach(function(p){files.set(p.path,{sha:p.sha,mode:p.mode,size:p.size||0});});
     ui.log("Saved part "+batchNo+" ("+plural(pending.length,"file")+")","ok"); pending=[]; pendingBytes=0;
+  }
+  async function sendOne(full,blob){
+    if(parentIsFile(full,files)) throw new Error("a file already uses part of this path");
+    if(policy==="skip"&&(files.has(full)||dirs.has(full))){R.skipped++;return;}
+    var sha=null; if(files.has(full)) sha=await gitSha(blob);
+    var r=resolveDest(full,policy,files,dirs,taken,sha);
+    if(r.action==="same"&&force&&files.has(full)) r={path:full,action:"replace"};
+    if(r.action==="same"){R.same++;return;}
+    if(r.action==="skip"){R.skipped++;return;}
+    taken.add(r.path);
+    var res=await gh("POST",api()+"/git/blobs",blob.size?{content:await toBase64(blob),encoding:"base64"}:{content:"",encoding:"utf-8"},true);
+    var mode=(r.action==="replace"&&files.get(r.path))?files.get(r.path).mode:"100644";
+    pending.push({path:r.path,mode:mode,type:"blob",sha:res.sha,size:blob.size}); pendingBytes+=blob.size;
+    if(r.action==="replace") R.replaced++; else if(r.action==="rename"){R.renamed++;ui.log(full+" saved as "+r.path,"warn");} else R.added++;
   }
   for(var i=0;i<sel.length;i++){
     if(o.cancelled()) break;
     var f=sel[i], full=ctx.join(ctx.mapped(f.path));
     ui.progress(i/sel.length); ui.status((i+1)+" of "+sel.length+": "+f.path);
     try{
-      if(parentIsFile(full,files)) throw new Error("a file already uses part of this path");
-      if(policy==="skip"&&(files.has(full)||dirs.has(full))){R.skipped++;continue;}
-      var blob=await f.getBlob(), sha=null;
-      if(files.has(full)) sha=await gitSha(blob);
-      var r=resolveDest(full,policy,files,dirs,taken,sha);
-      if(r.action==="same"){R.same++;continue;}
-      if(r.action==="skip"){R.skipped++;continue;}
-      taken.add(r.path);
-      var res=await gh("POST",api()+"/git/blobs",blob.size?{content:await toBase64(blob),encoding:"base64"}:{content:"",encoding:"utf-8"},true);
-      var mode=(r.action==="replace"&&files.get(r.path))?files.get(r.path).mode:"100644";
-      pending.push({path:r.path,mode:mode,type:"blob",sha:res.sha}); pendingBytes+=blob.size;
-      if(r.action==="replace") R.replaced++; else if(r.action==="rename"){R.renamed++;ui.log(full+" saved as "+r.path,"warn");} else R.added++;
+      if(f.split){
+        await loadScript("app/vendor/pdflib.js"); await loadScript("app/pdftools.js");
+        var big=await f.getBlob();
+        var parts=await window.AtlasPdf.split(big,maxBytes(),{status:function(t){ui.status((i+1)+" of "+sel.length+": "+f.path+". "+t);},cancelled:o.cancelled});
+        big=null;
+        if(!parts) break;
+        var dir=full.indexOf("/")>=0?full.slice(0,full.lastIndexOf("/")+1):"", stem=basename(full).replace(/\.pdf$/i,"");
+        ui.log(f.path+" was split into "+plural(parts.length,"part")+": "+parts.map(function(p){return fmt(p.blob.size);}).join(", "),"ok");
+        R.split++;
+        for(var k=0;k<parts.length;k++){
+          if(o.cancelled()) break;
+          await sendOne(dir+window.AtlasPdf.partName(stem,parts[k].a,parts[k].b),parts[k].blob); R.parts++; parts[k].blob=null;
+          if(pending.length>=BATCH_FILES||pendingBytes>=BATCH_BYTES) await commitBatch();
+        }
+      }else{
+        await sendOne(full,await f.getBlob());
+      }
     }catch(e){
       if(e&&(e.status===401||e.status===403)&&!/rate limit|abuse|secondary/i.test(e.message)) throw e;
       R.failed.push(f.path); ui.log("Failed: "+f.path+". "+(e&&e.message||e),"bad");
@@ -1116,11 +1184,12 @@ async function sendItems(o){
   }
   await commitBatch();
   ui.progress(1);
-  var parts=[];
-  if(R.added) parts.push(R.added+" added"); if(R.replaced) parts.push(R.replaced+" replaced"); if(R.renamed) parts.push(R.renamed+" saved as copies");
-  if(R.skipped) parts.push(R.skipped+" skipped"); if(R.same) parts.push(R.same+" already identical");
-  if(R.failed.length) parts.push(R.failed.length+" failed");
-  R.text=(o.cancelled()?"Stopped. ":"Done. ")+(parts.length?parts.join(", "):"Nothing to send")+".";
+  var parts2=[];
+  if(R.added) parts2.push(R.added+" added"); if(R.replaced) parts2.push(R.replaced+" replaced"); if(R.renamed) parts2.push(R.renamed+" saved as copies");
+  if(R.split) parts2.push(plural(R.split,"PDF")+" split into "+plural(R.parts,"part"));
+  if(R.skipped) parts2.push(R.skipped+" skipped"); if(R.same) parts2.push(R.same+" already identical");
+  if(R.failed.length) parts2.push(R.failed.length+" failed");
+  R.text=(o.cancelled()?"Stopped. ":"Done. ")+(parts2.length?parts2.join(", "):"Nothing to send")+".";
   return R;
 }
 function previewCounts(sel,dest,folderPolicy){
@@ -1130,6 +1199,8 @@ function previewCounts(sel,dest,folderPolicy){
 }
 function chip(t,c){return el("span",{class:"chip"+(c?" "+c:"")},t);}
 function policyWord(p){return {skip:"will be left as they are",rename:"will be saved as copies",replace:"will be replaced"}[p];}
+var FORCE_HINT="Normally an identical file is skipped. This sends it again and counts it as replaced. Git keeps identical content only once, so the repository itself doesn't change.";
+function splitHint(){return "A PDF over "+maxLabel()+" MB is cut into continuous page ranges under that size and saved as name pages1to16.pdf, name pages17to31.pdf and so on. Text and pictures are kept; bookmarks and form fields are not.";}
 var FILE_HINT={skip:"Files that already exist are left as they are.",rename:"The new file is saved in the same folder with _1 added to its name, then _2, _3 and so on.",replace:"The existing file is overwritten. You can undo this from History."};
 var FOLDER_HINT={merge:"New files go into the folder that's already there.",copy:"The incoming folder is saved as Folder_1, Folder_2 and so on, so nothing is mixed."};
 
@@ -1140,7 +1211,7 @@ $("inFiles").addEventListener("change",function(e){
 });
 function addFilesSheet(list){
   var holder={dest:S.lib.cwd}, policy=S.opts.filePolicy, limit=getLimit()*MB;
-  var items=list.map(function(f){var tooBig=f.size>=MAX_BYTES, empty=f.size===0, big=tooBig||empty||f.size>limit;return {path:f.name,size:f.size,big:big,empty:empty,tooBig:tooBig,checked:!big,getBlob:function(){return Promise.resolve(f);}};});
+  var items=list.map(function(f){var c=classify(f.name,f.size);return {path:f.name,size:f.size,big:c.big,empty:c.empty,tooBig:c.tooBig,split:c.split,checked:!c.big,getBlob:function(){return Promise.resolve(f);}};});
   var listEl=el("div",{class:"list scroll",style:"max-height:30vh"}), sumEl=el("p",{class:"muted small",style:"margin-top:8px"}), planEl=el("div",{class:"chips",style:"margin-top:8px"});
   var bar=el("i"), progress=el("div",{class:"progress",hidden:true},bar), status=el("div",{class:"status small"}), logEl=el("div",{class:"log",hidden:true});
   var cancel=false, running=false;
@@ -1148,7 +1219,7 @@ function addFilesSheet(list){
     listEl.replaceChildren();
     items.forEach(function(it){
       var cb=el("input",{type:"checkbox",checked:it.checked,disabled:it.tooBig||running,"aria-label":"Include "+it.path,onchange:function(){it.checked=cb.checked;paintList();}});
-      listEl.appendChild(el("div",{class:"row"},cb,fileTile(it.path),el("div",{class:"name"},it.path,it.big?el("span",{class:"tag"+(it.tooBig?" bad":"")},it.tooBig?"too large":(it.empty?"empty":"large")):null,el("small",null,fmt(it.size)+(it.tooBig?"  ·  over the 100 MB limit":"")))));
+      listEl.appendChild(el("div",{class:"row"},cb,fileTile(it.path),el("div",{class:"name"},it.path,(it.big||it.split)?el("span",{class:"tag"+(it.tooBig?" bad":"")+(it.split?" split":"")},tagFor(it)):null,el("small",null,fmt(it.size)+splitNote(it)+(it.tooBig?"  ·  too large to send":"")))));
     });
     var sel=items.filter(function(i){return i.checked;});
     sumEl.textContent=sel.length+" of "+items.length+" selected, "+fmt(sel.reduce(function(s,i){return s+i.size;},0));
@@ -1159,10 +1230,15 @@ function addFilesSheet(list){
     }
   }
   var dr=destRow(holder,"dest",paintList);
+  var forceCb=el("input",{type:"checkbox",checked:!!S.opts.forceSame,onchange:function(){S.opts.forceSame=forceCb.checked;savePrefs();}});
+  var forceRow=el("div",{hidden:policy!=="replace"},el("label",{class:"check"},forceCb,"Replace even if the file is identical"),el("p",{class:"hint",style:"margin:0 0 0 34px"},FORCE_HINT));
+  var splitCb=el("input",{type:"checkbox",checked:!!S.opts.splitPdf,onchange:function(){S.opts.splitPdf=splitCb.checked;savePrefs();items.forEach(function(it){reclass(it,"path");});paintList();}});
+  var splitRow=el("div",null,el("label",{class:"check"},splitCb,"Split large PDFs into parts"),el("p",{class:"hint",style:"margin:0 0 0 34px"},splitHint()));
   var content=el("div",null,
     el("div",{class:"field",style:"margin-top:0"},el("span",null,"Upload to"),dr),
     el("div",{class:"field"},el("span",null,"Files"),listEl),sumEl,planEl,
-    el("div",{class:"field"},el("span",null,"If a file already exists"),seg([["skip","Skip"],["rename","Save as copy"],["replace","Replace"]],policy,function(v){policy=v;paintList();})),
+    el("div",{class:"field"},el("span",null,"If a file already exists"),seg([["skip","Skip"],["rename","Save as copy"],["replace","Replace"]],policy,function(v){policy=v;forceRow.hidden=v!=="replace";paintList();})),
+    forceRow,splitRow,
     progress,status,logEl);
   paintList();
   var sh=openSheet({title:"Add files",content:content,actions:[
@@ -1178,7 +1254,7 @@ function addFilesSheet(list){
       var wl=null;
       try{
         try{ if("wakeLock" in navigator) wl=await navigator.wakeLock.request("screen"); }catch(e){}
-        var R=await sendItems({sel:sel,dest:dest,filePolicy:policy,folderPolicy:"merge",ui:ui,cancelled:function(){return cancel;}});
+        var R=await sendItems({sel:sel,dest:dest,filePolicy:policy,folderPolicy:"merge",forceSame:S.opts.forceSame,ui:ui,cancelled:function(){return cancel;}});
         status.textContent=R.text; ui.log(R.text,R.failed.length?"warn":"ok"); toast(R.text,R.failed.length>0);
         S.act.loaded=false; goDir(dest); await loadRepo(); a.lock(false); a.close();
       }catch(e){
@@ -1299,7 +1375,24 @@ function cleanItemPath(name,strip){
   if(strip&&parts.length>1) parts=parts.slice(1);
   return parts;
 }
-function getLimit(){var v=parseFloat($("optLimit").value);if(!(v>0))v=49;return Math.min(v,99);}
+function maxBytes(){return Math.max(Math.round(0.1*MB),Math.round((getLimit()-0.1)*MB));}
+function maxLabel(){return (Math.max(0.1,getLimit()-0.1)).toFixed(1);}
+var MAX_SPLIT=400*MB;
+function isPdfName(n){return /\.pdf$/i.test(n);}
+function classify(name,size){
+  var mx=maxBytes(), c={empty:size===0,split:false,tooBig:false,big:false};
+  if(c.empty){c.big=true;return c;}
+  if(S.opts.splitPdf&&isPdfName(name)&&size>mx){ if(size>=MAX_SPLIT){c.tooBig=true;c.big=true;} else c.split=true; return c; }
+  c.tooBig=size>=MAX_BYTES; c.big=c.tooBig||size>mx; return c;
+}
+function estParts(size){return Math.max(2,Math.ceil(size/(maxBytes()*0.97)));}
+function tagFor(k){return k.tooBig?"too large":(k.empty?"empty":(k.split?"split":"large"));}
+function splitNote(k){return k.split?"  ·  will be split into about "+estParts(k.size)+" parts":"";}
+function reclass(f,nameKey){
+  var c=classify(f[nameKey],f.size); f.empty=c.empty; f.tooBig=c.tooBig; f.split=c.split;
+  if(c.big!==f.big){f.big=c.big;f.checked=!c.big;}
+}
+function getLimit(){var v=parseFloat($("optLimit").value);if(!(v>0))v=50;return Math.min(v,99);}
 function exBuild(){
   var limit=getLimit()*MB, root=mkdir("",""), ignored=0, dupes=0, strip=$("optStrip").checked;
   S.ex.items.forEach(function(r){
@@ -1311,8 +1404,8 @@ function exBuild(){
       node=c;
     }
     var fname=parts[parts.length-1]; if(node.children.has(fname)) dupes++;
-    var tooBig=r.size>=MAX_BYTES, empty=r.size===0, big=tooBig||empty||r.size>limit;
-    node.children.set(fname,{name:fname,path:parts.join("/"),isDir:false,size:r.size,getBlob:r.getBlob,empty:empty,big:big,tooBig:tooBig,checked:!big,locked:r.encrypted});
+    var cl=classify(fname,r.size);
+    node.children.set(fname,{name:fname,path:parts.join("/"),isDir:false,size:r.size,getBlob:r.getBlob,empty:cl.empty,split:cl.split,big:cl.big,tooBig:cl.tooBig,checked:!cl.big,locked:r.encrypted});
   });
   S.ex.root=root;
   var files=allFiles(root), total=files.reduce(function(s,f){return s+f.size;},0), info="";
@@ -1356,7 +1449,7 @@ function exWalk(node,depth,frag){
     }else{
       cb.checked=k.checked; cb.disabled=k.tooBig;
       cb.onchange=function(){k.checked=cb.checked;exRender();};
-      var nm=el("div",{class:"name",style:"cursor:pointer",title:"Preview",onclick:function(){previewExtract(k);}},k.name,k.locked?el("span",{class:"tag"},"password"):null,k.big?el("span",{class:"tag"+(k.tooBig?" bad":"")},k.tooBig?"too large":(k.empty?"empty":"large")):null,el("small",null,fmt(k.size)));
+      var nm=el("div",{class:"name",style:"cursor:pointer",title:"Preview",onclick:function(){previewExtract(k);}},k.name,k.locked?el("span",{class:"tag"},"password"):null,(k.big||k.split)?el("span",{class:"tag"+(k.tooBig?" bad":"")+(k.split?" split":"")},tagFor(k)):null,el("small",null,fmt(k.size)+splitNote(k)));
       row.append(el("span",{class:"sp"}),cb,fileTile(k.name),nm); frag.appendChild(row);
     }
   });
@@ -1369,15 +1462,15 @@ function exSkipped(){
   $("skipsum").textContent="Held back: "+bits.join(", ")+". Tick any you want to include.";
   big.sort(function(a,b){return a.path.localeCompare(b.path);}).forEach(function(f){
     var cb=el("input",{type:"checkbox",checked:f.checked,disabled:f.tooBig,"aria-label":"Include "+f.name,onchange:function(){f.checked=cb.checked;exRender();}});
-    box.appendChild(el("div",{class:"row"},cb,fileTile(f.name),el("div",{class:"name"},f.path,el("small",null,(f.empty?"empty file":fmt(f.size))+(f.tooBig?"  ·  over the 100 MB limit, can't be sent":"")))));
+    box.appendChild(el("div",{class:"row"},cb,fileTile(f.name),el("div",{class:"name"},f.path,el("small",null,(f.empty?"empty file":fmt(f.size))+(f.tooBig?"  ·  too large to send":"")))));
   });
 }
 function exSelected(){return allFiles(S.ex.root).filter(function(f){return f.checked&&!f.tooBig;}).sort(function(a,b){return a.path.localeCompare(b.path);});}
 function exSummary(){
   if(!S.ex.root) return;
   var fs=allFiles(S.ex.root), sel=fs.filter(function(f){return f.checked;}), bytes=sel.reduce(function(s,f){return s+f.size;},0);
-  var big=sel.filter(function(f){return f.big;}).length;
-  $("summary").textContent=sel.length+" of "+fs.length+" selected, "+fmt(bytes)+(big?", including "+big+" held back":"");
+  var big=sel.filter(function(f){return f.big;}).length, nsplit=sel.filter(function(f){return f.split;}).length;
+  $("summary").textContent=sel.length+" of "+fs.length+" selected, "+fmt(bytes)+(big?", including "+big+" held back":"")+(nsplit?". "+plural(nsplit,"PDF")+" will be split":"");
   $("go").disabled=!sel.length||S.ex.running||S.ex.locked.some(function(l){return l.kind==="zip";});
 }
 function upPreview(){
@@ -1398,9 +1491,10 @@ function paintExDest(){
   exDestRow=destRow(holder,"dest",upPreview); box.appendChild(exDestRow);
 }
 function buildSegs(){
-  $("segFile").replaceChildren(seg([["skip","Skip"],["rename","Save as copy"],["replace","Replace"]],S.opts.filePolicy,function(v){S.opts.filePolicy=v;savePrefs();$("hintFile").textContent=FILE_HINT[v];upPreview();}));
+  $("segFile").replaceChildren(seg([["skip","Skip"],["rename","Save as copy"],["replace","Replace"]],S.opts.filePolicy,function(v){S.opts.filePolicy=v;savePrefs();$("forceBox").hidden=v!=="replace";$("hintFile").textContent=FILE_HINT[v];upPreview();}));
   $("hintFile").textContent=FILE_HINT[S.opts.filePolicy];
   $("optStrip").checked=!!S.opts.strip; $("optLimit").value=S.opts.limit;
+  $("optSplit").checked=!!S.opts.splitPdf; $("optForce").checked=!!S.opts.forceSame; $("forceBox").hidden=S.opts.filePolicy!=="replace"; $("hintForce").textContent=FORCE_HINT; updLimitHint();
 }
 $("pickArch").onclick=function(){$("inArch").click();};
 $("inArch").addEventListener("change",function(e){var l=Array.from(e.target.files||[]);e.target.value="";if(l.length)exAdd(l);});
@@ -1417,11 +1511,14 @@ $("clearUp").onclick=function(){
   $("tree").replaceChildren();$("zipinfo").textContent="";$("upBody").hidden=true;$("clearUp").hidden=true;$("plan").replaceChildren();$("exLocked").replaceChildren();
   $("pickArch").classList.add("pulse");
 };
+function updLimitHint(){ $("limitHint").textContent="Files up to "+maxLabel()+" MB are sent. Anything bigger is held back"+(S.opts.splitPdf?", except PDFs, which are split.":"."); $("hintSplit").textContent=splitHint(); }
+$("optSplit").addEventListener("change",function(){S.opts.splitPdf=$("optSplit").checked;savePrefs();updLimitHint();if(S.ex.root){allFiles(S.ex.root).forEach(function(f){reclass(f,"name");});exRender();}});
+$("optForce").addEventListener("change",function(){S.opts.forceSame=$("optForce").checked;savePrefs();});
 $("optStrip").addEventListener("change",function(){S.opts.strip=$("optStrip").checked;savePrefs();exBuild();});
 $("optLimit").addEventListener("change",function(){
   S.opts.limit=getLimit();savePrefs();
-  if(!S.ex.root) return; var limit=getLimit()*MB;
-  allFiles(S.ex.root).forEach(function(f){var big=f.tooBig||f.empty||f.size>limit;if(big!==f.big){f.big=big;f.checked=!big;}});
+  updLimitHint(); if(!S.ex.root) return;
+  allFiles(S.ex.root).forEach(function(f){reclass(f,"name");});
   exRender();
 });
 $("selAll").onclick=function(){allFiles(S.ex.root).forEach(function(f){if(!f.big)f.checked=true;});exRender();};
@@ -1450,7 +1547,7 @@ $("go").onclick=async function(){
   try{
     try{ if("wakeLock" in navigator) wl=await navigator.wakeLock.request("screen"); }catch(e){}
     var ui={status:function(t){$("status").textContent=t;},progress:function(f){$("bar").style.width=Math.round(f*100)+"%";},log:exLog};
-    var R=await sendItems({sel:sel,dest:dest,filePolicy:S.opts.filePolicy,folderPolicy:"merge",ui:ui,cancelled:function(){return S.ex.cancel;}});
+    var R=await sendItems({sel:sel,dest:dest,filePolicy:S.opts.filePolicy,folderPolicy:"merge",forceSame:S.opts.forceSame,ui:ui,cancelled:function(){return S.ex.cancel;}});
     $("status").textContent=R.text; exLog(R.text,R.failed.length?"warn":"ok"); toast(R.text,R.failed.length>0);
     if(R.failed.length) exLog("Run it again to retry the files that failed.","warn");
     S.act.loaded=false; loadRepo();
@@ -1565,7 +1662,7 @@ window.AtlasHost={
   open:openFile,goDir:goDir,convertMany:null,
   convertOne:async function(path){var r=await convertMany([path],{del:false},null);if(r.failed.length)throw new Error(r.failed[0].error);return r.ok.length?r.ok[0].target:r.skipped[0].target;},
   refresh:function(){S.act.loaded=false;return loadRepo();},
-  dark:function(){return window.matchMedia&&matchMedia("(prefers-color-scheme: dark)").matches;},
+  dark:function(){return document.documentElement.getAttribute("data-theme")!=="light";},
   prefs:S.opts,savePrefs:savePrefs,newFolderTile:folderTile
 };
 
@@ -1629,7 +1726,24 @@ $("actConvert").onclick=function(){
 };
 
 /* ----- new file ----- */
-$("newFile").append(ico("plus"),"New file");
+$("newFile").append(ico("fileplus"));
+[["newFolder","New folder"],["newFile","New file"],["addFiles","Add files"],["libRefresh","Refresh"],["sortBtn","Sort"],["searchBtn","Search"]].forEach(function(x){$(x[0]).setAttribute("aria-label",x[1]);$(x[0]).title=x[1];});
+$("searchBtn").innerHTML=svg("search");
+function setSearch(open){
+  var w=$("searchWrap"); w.classList.toggle("open",open); w.inert=!open;
+  $("searchBtn").setAttribute("aria-expanded",String(open)); $("searchBtn").classList.toggle("on",open);
+  if(open) setTimeout(function(){try{$("libSearch").focus({preventScroll:true});}catch(e){}},200);
+  else if(S.lib.q){ S.lib.q=""; $("libSearch").value=""; renderLibrary(); }
+}
+$("searchBtn").onclick=function(){setSearch(!$("searchWrap").classList.contains("open"));};
+$("libSearch").addEventListener("keydown",function(e){ if(e.key==="Escape"){e.preventDefault();e.stopPropagation();setSearch(false);$("searchBtn").focus();} });
+function fitConn(){
+  var t=$("connName"); if(!t||!t.parentNode||$("shell").hidden) return;
+  var s=13; t.style.fontSize=s+"px";
+  while(t.scrollWidth>t.clientWidth+1&&s>9){ s-=.5; t.style.fontSize=s+"px"; }
+}
+window.addEventListener("resize",fitConn);
+if(document.fonts&&document.fonts.ready) document.fonts.ready.then(fitConn);
 $("newFile").onclick=function(){
   var nameIn=el("input",{placeholder:"notes.md",autocapitalize:"off",autocomplete:"off",spellcheck:"false"});
   openSheet({title:"New file",sub:"In "+(S.lib.cwd?"/"+S.lib.cwd:"All files"),content:el("label",{class:"field",style:"margin-top:0"},el("span",null,"Name"),nameIn),actions:[
@@ -1650,6 +1764,21 @@ function switchRow(label,checked,onChange,hint){
   var cb=el("input",{type:"checkbox",checked:checked,onchange:function(){onChange(cb.checked);}});
   return el("div",null,el("label",{class:"check"},cb,label),hint?el("p",{class:"hint",style:"margin:0 0 8px 34px"},hint):null);
 }
+var THEME_BAR={light:"#ffffff",dark:"#060914",night:"#000000"};
+function applyTheme(t,nosave){
+  if(!THEME_BAR[t]) t="dark"; S.opts.theme=t; if(!nosave) savePrefs();
+  document.documentElement.setAttribute("data-theme",t);
+  var m=document.querySelector("meta[name=theme-color]"); if(m) m.setAttribute("content",THEME_BAR[t]);
+}
+/* no right-click menu, except where the person types */
+document.addEventListener("contextmenu",function(e){
+  var t=e.target, ok=false, f;
+  if(t&&t.closest){
+    f=t.closest("input,textarea,[contenteditable=true]");
+    if(f) ok=f.tagName!=="INPUT"||/^(text|number|password|search|url|email|tel)$/i.test(f.getAttribute("type")||"text");
+  }
+  if(!ok) e.preventDefault();
+},true);
 $("menuBtn").innerHTML=svg("dots");
 $("menuBtn").addEventListener("click",function(){
   var tabs=el("div",{class:"menutabs"},TABS.map(function(t){
@@ -1657,6 +1786,7 @@ $("menuBtn").addEventListener("click",function(){
   }));
   var list=el("div",{style:"display:grid;gap:6px"},
     tabs,
+    el("div",{class:"field",style:"margin:6px 0 2px"},el("span",null,"Appearance"),seg([["light","Light"],["dark","Dark"],["night","Night"]],S.opts.theme||"dark",function(v){applyTheme(v);})),
     switchRow("Show app files",!S.opts.hideApp,function(v){S.opts.hideApp=!v;savePrefs();buildIndex();renderLibrary();renderSide();},"The files that make this app run (index.html and the app folder). They show with an app tag. Be careful changing them."),
     switchRow("Keep opened files for offline use",!!S.opts.offline,function(v){S.opts.offline=v;savePrefs();if(!v)clearOffline();},"Saves files you open on this device, unencrypted, so they open without a connection. Turn off on a shared device."),
     el("div",{style:"display:grid;gap:10px;margin-top:8px"},

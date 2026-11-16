@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -12,6 +12,7 @@
 <link rel="icon" href="app/icons/icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="app/icons/icon-192.png">
 <link rel="stylesheet" href="app/app.css">
+<script src="app/theme.js"></script>
 </head>
 <body>
 
@@ -72,15 +73,20 @@
       <main class="pane" id="pane">
         <!-- Files -->
         <section id="tab-files">
-          <h1 class="page-title">Files</h1>
+          <div class="pagehead">
+            <h1 class="page-title">Files</h1>
+            <div class="tools" role="toolbar" aria-label="File actions">
+              <button class="tb" id="searchBtn" type="button" aria-expanded="false" aria-controls="searchWrap"></button>
+              <button class="tb" id="libRefresh" type="button"></button>
+              <button class="tb" id="sortBtn" type="button"></button>
+              <button class="tb" id="newFolder" type="button"></button>
+              <button class="tb" id="newFile" type="button"></button>
+              <button class="tb primary" id="addFiles" type="button"></button>
+            </div>
+          </div>
           <p class="page-sub" id="libStat">Loading</p>
-          <div class="toolbar">
-            <div class="searchbox"><span class="ico" data-ico="search"></span><input id="libSearch" type="text" placeholder="Search files and folders" autocapitalize="off" autocomplete="off" spellcheck="false"></div>
-            <button class="ibtn" id="libRefresh" aria-label="Refresh"></button>
-            <button class="ibtn" id="sortBtn" aria-label="Sort" title="Sort" type="button"></button>
-            <button class="btn" id="newFolder" type="button"></button>
-            <button class="btn" id="newFile" type="button"></button>
-            <button class="btn primary" id="addFiles" type="button"></button>
+          <div class="searchwrap" id="searchWrap" inert>
+            <div><div class="searchbox"><span class="ico" data-ico="search"></span><input id="libSearch" type="text" placeholder="Search files and folders" autocapitalize="off" autocomplete="off" spellcheck="false"></div></div>
           </div>
           <div class="pathbar" id="libCrumbs"></div>
           <label class="selall" id="selAllRow"><input type="checkbox" id="selAllBox"> <span>Select all</span></label>
@@ -109,10 +115,17 @@
               <div id="exDest"></div>
               <div class="field"><span>If a file already exists</span><div id="segFile"></div></div>
               <p class="hint" id="hintFile"></p>
+              <div id="forceBox" hidden>
+                <label class="check" style="margin-top:8px"><input type="checkbox" id="optForce"> Replace even if the file is identical</label>
+                <p class="hint" id="hintForce" style="margin:0 0 4px 34px"></p>
+              </div>
               <label class="check" style="margin-top:12px"><input type="checkbox" id="optStrip"> Remove the outer folder from each path</label>
+              <label class="check" style="margin-top:4px"><input type="checkbox" id="optSplit"> Split large PDFs into parts</label>
+              <p class="hint" id="hintSplit" style="margin:0 0 4px 34px"></p>
               <label class="field" style="margin-top:8px"><span>Hold back files larger than<i>MB</i></span>
-                <input id="optLimit" type="number" min="1" max="99" step="1" value="49" inputmode="numeric">
+                <input id="optLimit" type="number" min="1" max="99" step="1" value="50" inputmode="numeric">
               </label>
+              <p class="hint" id="limitHint"></p>
             </section>
 
             <section class="sec">
