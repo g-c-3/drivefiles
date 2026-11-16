@@ -83,14 +83,16 @@ function ago(iso){
 }
 function hue(name){var h=0,i;for(i=0;i<name.length;i++) h=(h*31+name.charCodeAt(i))>>>0; return (h*47)%360;}
 var FOLDER_SVG='<svg viewBox="0 0 32 32" fill="currentColor"><path opacity=".5" d="M3 8a3 3 0 0 1 3-3h6l3 3h11a3 3 0 0 1 3 3v13a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3z"/><path d="M3 13a3 3 0 0 1 3-3h20a3 3 0 0 1 3 3v11a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3z"/></svg>';
-function folderTile(name){var t=el("span",{class:"tile fold",style:"--h:"+hue(name||"/")});t.innerHTML=FOLDER_SVG;return t;}
-function folderMini(name){var t=el("span",{class:"mini",style:"--h:"+hue(name||"/")});t.innerHTML=FOLDER_SVG;return t;}
+function folderTile(name){var t=el("span",{class:"tile fold"+((!name||name==="/")?" neon":""),style:"--h:"+hue(name||"/")});t.innerHTML=FOLDER_SVG;return t;}
+function folderMini(name){var t=el("span",{class:"mini"+((!name||name==="/")?" neon":""),style:"--h:"+hue(name||"/")});t.innerHTML=FOLDER_SVG;return t;}
 function fileTile(name){var d=name.lastIndexOf("."), ext=d>0?name.slice(d+1,d+5):"";return el("span",{class:"tile file"},ext.toUpperCase());}
 function toast(msg,bad){
   var t=el("div",{class:"toast"+(bad?" bad":""),role:"status"},msg);
   $("toasts").appendChild(t);
-  setTimeout(function(){ if(t.parentNode) t.parentNode.removeChild(t); },bad?6500:3400);
+  setTimeout(function(){ fadeToast(t); },bad?6500:3400);
 }
+function fadeToast(t){ if(!t.parentNode||t.classList.contains("out")) return; t.classList.add("out"); setTimeout(function(){ if(t.parentNode) t.parentNode.removeChild(t); },260); }
+function clearToasts(){ Array.prototype.forEach.call($("toasts").children,fadeToast); }
 function basename(p){return p.slice(p.lastIndexOf("/")+1);}
 function joinPath(a,b){return a?a+"/"+b:b;}
 function cleanSegs(p){
@@ -119,7 +121,7 @@ function saveBlob(blob,name){
 var S={
   cfg:null, pass:null, pid:null, tab:"files", logSink:null,
   repo:{loaded:false,loading:false,error:null,files:new Map(),dirs:new Set(),index:new Map(),head:null},
-  ex:{readers:[],items:[],errors:[],root:null,locked:[],dest:"",destTouched:false,running:false,cancel:false,opening:false},
+  ex:{names:[],readers:[],items:[],errors:[],root:null,locked:[],dest:"",destTouched:false,running:false,cancel:false,opening:false},
   lib:{cwd:"",sel:new Set(),q:"",exp:new Set(),mode:"name",hits:null,busy:0},
   act:{loaded:false,list:[]},
   opts:{filePolicy:"skip",folderPolicy:"merge",strip:false,limit:50,splitPdf:true,forceSame:false,theme:"dark",sortKey:"name",sortDir:"asc",hideApp:false,offline:false,autoLock:2,shrink:false,shrinkMax:2048}
@@ -254,11 +256,12 @@ async function openProfile(p,pass){
   if(p.kind==="device"){ var k=await deviceKey(false); if(!k) throw new Error("key missing"); return openWith(k,p.enc); }
   return openWith(await deriveKey(pass,unb64(p.enc.s),p.enc.n||ITER_OLD),p.enc);
 }
-function loadPrefs(){try{Object.assign(S.opts,JSON.parse(localStorage.getItem(PK)||"{}"));}catch(e){} if(S.opts.limit===48||S.opts.limit===49) S.opts.limit=50; S.opts.folderPolicy="merge";}
+function loadPrefs(){try{Object.assign(S.opts,JSON.parse(localStorage.getItem(PK)||"{}"));}catch(e){} if(S.opts.limit===48||S.opts.limit===49) S.opts.limit=50; S.opts.folderPolicy="merge"; S.opts.hideApp=false;}
 function savePrefs(){try{localStorage.setItem(PK,JSON.stringify(S.opts));}catch(e){}}
 
 /* ================= screens ================= */
 function showScreen(name){
+  if(name!=="shell"){ var fh=$("fHome"); if(fh) fh.classList.remove("on"); }
   ["s-home","s-setup","shell"].forEach(function(id){$(id).hidden=(id!==name);});
   window.scrollTo(0,0);
   if(name==="s-home") Nav.clear();
@@ -267,6 +270,7 @@ function showScreen(name){
 }
 function curProfile(){return S.pid?findProf(S.pid):null;}
 function lockNow(){
+  clearToasts();
   S.cfg=null; S.pass=null; S.pid=null; resetRepo(); S.lib.sel.clear(); closeAllSheets();
   showHome();
 }
@@ -306,24 +310,21 @@ async function loginWith(id){
 /* a repository saved by an earlier version without a passcode: ask for one now, then lock it with that */
 function upgradeSheet(p){
   var a=el("input",{type:"password",placeholder:"Choose your own passcode",autocomplete:"new-password",autocapitalize:"off",spellcheck:"false"});
-  var b=el("input",{type:"password",placeholder:"Type it again",autocomplete:"new-password",autocapitalize:"off",spellcheck:"false"});
   var eye=el("button",{type:"button",class:"ibtn","aria-label":"Show or hide passcode"}); eye.innerHTML=svg("eye");
-  var row2=el("label",{class:"field"},el("span",null,"Repeat passcode"),b);
-  eye.addEventListener("click",function(){ var show=a.type==="password"; a.type=show?"text":"password"; eye.innerHTML=svg(show?"eyeoff":"eye"); row2.hidden=show; });
+  eye.addEventListener("click",function(){ var show=a.type==="password"; a.type=show?"text":"password"; eye.innerHTML=svg(show?"eyeoff":"eye"); a.focus(); });
   var content=el("div",null,
     el("p",null,"Atlas now asks for a passcode on every saved repository. Choose one for "+profName(p)+". Any length and any characters."),
-    el("label",{class:"field"},el("span",null,"Passcode"),el("div",{class:"pw"},a,eye)),row2);
+    el("label",{class:"field"},el("span",null,"Passcode"),el("div",{class:"pw"},a,eye)));
   var sh=openSheet({title:"Add a passcode",content:content,actions:[
     {label:"Cancel"},
     {label:"Save and log in",kind:"primary",fn:async function(){
       var pass=a.value; if(!pass) throw new Error("Choose a passcode.");
-      if(a.type==="password"&&b.value!==pass) throw new Error("The two passcodes don't match.");
       var cfg;
       try{ cfg=await openProfile(p); }catch(e){ throw new Error("Couldn't open "+profName(p)+" on this device. Delete it and add it again."); }
       var np=await sealProfile(cfg,pass); np.id=p.id; PF.list[PF.list.indexOf(p)]=np; writeStore();
       startSession(np,cfg,pass);
     }}]});
-  [a,b].forEach(function(i){i.addEventListener("keydown",function(e){ if(e.key==="Enter"){e.preventDefault();sh.btns[1].click();} });});
+  [a].forEach(function(i){i.addEventListener("keydown",function(e){ if(e.key==="Enter"){e.preventDefault();sh.btns[1].click();} });});
   setTimeout(function(){a.focus();},320);
 }
 function askPasscode(p){
@@ -408,7 +409,7 @@ function showSetup(editId){
   var c=editId?(S.cfg||{}):{}, parts=(c.repo||"").split("/");
   $("setupTitle").textContent=editId?"Edit details":"Add a repository";
   $("cfgOwner").value=parts[0]||""; $("cfgRepo").value=parts[1]||""; $("cfgBranch").value=c.branch||"main"; $("cfgToken").value=c.token||"";
-  $("cfgPass").value=editId?(S.pass||""):""; $("cfgPass2").value=""; $("cfgPass").type="password"; $("passEye").innerHTML=svg("eye"); $("pass2Row").hidden=false;
+  $("cfgPass").value=editId?(S.pass||""):""; $("cfgPass").type="password"; $("passEye").innerHTML=svg("eye");
   $("cfgToken").type="password"; $("tokEye").innerHTML=svg("eye");
   $("setupErr").textContent="";
   $("setupGo").textContent=editId?"Save changes":"Save"; $("setupOpen").hidden=!!editId;
@@ -420,7 +421,7 @@ $("tokEye").addEventListener("click",function(){
 });
 $("passEye").innerHTML=svg("eye");
 $("passEye").addEventListener("click",function(){
-  var f=$("cfgPass"), show=f.type==="password"; f.type=show?"text":"password"; $("passEye").innerHTML=svg(show?"eyeoff":"eye"); $("pass2Row").hidden=show;
+  var f=$("cfgPass"), show=f.type==="password"; f.type=show?"text":"password"; $("passEye").innerHTML=svg(show?"eyeoff":"eye");
 });
 $("setupCancel").addEventListener("click",function(){ if(editingId&&S.cfg) showScreen("shell"); else showHome(); });
 async function verifyRepo(cfg){
@@ -443,8 +444,6 @@ async function saveSetup(openAfter){
   if(!/^[\w.-]+$/.test(name)){ $("setupErr").textContent="Enter the repository name."; return; }
   if(!token){ $("setupErr").textContent="Enter your access token."; return; }
   if(!pass){ $("setupErr").textContent="Choose a passcode. It's required, and you pick what it is."; return; }
-  var unchanged=editingId&&S.pass&&pass===S.pass;
-  if($("cfgPass").type==="password"&&!unchanged&&$("cfgPass2").value!==pass){ $("setupErr").textContent="The two passcodes don't match."; return; }
   var btns=[$("setupGo"),$("setupOpen"),$("setupCancel")]; btns.forEach(function(b){b.disabled=true;});
   $("setupErr").textContent="";
   try{
@@ -716,7 +715,26 @@ function setTabRaw(name){
   if(name==="extract"){ if(!S.ex.destTouched) S.ex.dest=S.lib.cwd; paintExDest(); upPreview(); }
   if(name==="history"&&!S.act.loaded) loadActivity();
   updateActionbar(); $("pane").scrollTop=0; window.scrollTo(0,0);
+  placeHome();
 }
+/* floating Home button on Extract and History: sits level with the page title and stays put while the page scrolls */
+var homeY=null;
+function placeHome(){
+  var b=$("fHome"); if(!b) return;
+  var t=S.tab==="extract"?$("exTitle"):(S.tab==="history"?$("hiTitle"):null);
+  if(!t||!S.cfg){ b.classList.remove("on"); return; }
+  requestAnimationFrame(function(){
+    var r=t.getBoundingClientRect();
+    if(r.width){ b.style.top=Math.max(4,Math.round(r.top+r.height/2-b.offsetHeight/2))+"px"; }
+    b.classList.add("on");
+  });
+}
+$("fHome").innerHTML=svg("home");
+$("fHome").addEventListener("click",function(){
+  var pane=$("pane"); pane.classList.add("swap-out");
+  setTimeout(function(){ setTab("files"); pane.classList.remove("swap-out"); pane.classList.add("swap-in"); setTimeout(function(){pane.classList.remove("swap-in");},320); },170);
+});
+window.addEventListener("resize",placeHome);
 /* ================= GitHub API ================= */
 function bp(){return S.cfg.branch.split("/").map(encodeURIComponent).join("/");}
 function api(){return "/repos/"+S.cfg.repo;}
@@ -866,7 +884,7 @@ function renderSide(){
   var r=S.repo, total=0; r.files.forEach(function(f,p){if(!S.opts.hideApp||!isApp(p))total+=f.size;});
   $("sideStat").replaceChildren(el("b",null,plural(r.index.size?countVisibleFiles():0,"file")),fmt(total)+" in your repository");
   if(!r.loaded) return;
-  box.appendChild(el("div",{class:"trow"+(S.lib.cwd===""?" on":""),onclick:function(){goDir("");}},el("span",{class:"tcaret"}),folderMini("/"),el("span",{class:"tn"},"All files")));
+  box.appendChild(el("div",{class:"trow"+(S.lib.cwd===""?" on":""),onclick:function(){goDir("");}},el("span",{class:"tcaret"}),folderMini("/"),el("span",{class:"tn"},"Repo root")));
   (function walk(dir,depth){
     childDirs(dir).slice(0,300).forEach(function(d){
       var open=S.lib.exp.has(d.path), has=childDirs(d.path).length>0;
@@ -914,7 +932,7 @@ function renderLibrary(){
     $("libCrumbs").appendChild(el("span",{class:"muted small",style:"padding:7px 9px"},S.lib.mode==="text"?(S.lib.busy?"Searching inside files…":(S.lib.hits?plural(S.lib.hits.length,"file")+" contain “"+q+"”":"Press Enter to search inside files")):"Results for “"+q+"”"));
   }else{
     var parts=S.lib.cwd?S.lib.cwd.split("/"):[], acc="";
-    $("libCrumbs").appendChild(el("button",{type:"button",onclick:function(){goDir("");},"aria-label":"All files"},ico("home")));
+    $("libCrumbs").appendChild(el("button",{type:"button",onclick:function(){goDir("");},"aria-label":"Repo root"},ico("home")));
     parts.forEach(function(p){
       acc=joinPath(acc,p); var path=acc;
       $("libCrumbs").appendChild(ico("chev"));
@@ -1085,10 +1103,10 @@ function folderTree(o){
   var label=el("div",{class:"fsel"});
   function draw(){
     var frag=document.createDocumentFragment();
-    frag.appendChild(row("","All files",0,null,false));
+    frag.appendChild(row("","Repo root",0,null,false));
     walk("",1,frag);
     box.replaceChildren(frag);
-    label.textContent="Selected: "+(sel?"/"+sel:"All files");
+    label.textContent="Selected: "+(sel?"/"+sel:"Repo root");
   }
   var nameIn=el("input",{placeholder:"New folder name",autocapitalize:"off",autocomplete:"off",spellcheck:"false","aria-label":"New folder name"});
   var addBtn=el("button",{type:"button",class:"btn sm",onclick:function(){
@@ -1114,7 +1132,7 @@ function destRow(holder,key,onChange){
   var row=el("div",{class:"destrow"});
   function paint(){
     row.replaceChildren(folderTile(holder[key]?basename(holder[key]):"/"),
-      el("div",{class:"name"},holder[key]?basename(holder[key]):"All files",el("small",null,holder[key]?"/"+holder[key]:"Top level of the repository")),
+      el("div",{class:"name"},holder[key]?basename(holder[key]):"Repo root",el("small",null,holder[key]?"/"+holder[key]:"Top level of the repository")),
       el("button",{class:"btn sm",type:"button",onclick:async function(){
         var p=await pickFolder({start:holder[key],title:"Choose a folder"}); if(p!==null){holder[key]=p;paint();if(onChange)onChange();}
       }},"Change"));
@@ -1209,7 +1227,7 @@ $("actRename").onclick=function(){moveCopySheet("rename");};
 /* ----- new folder ----- */
 $("newFolder").onclick=function(){
   var nameIn=el("input",{placeholder:"Folder name",autocapitalize:"off",autocomplete:"off",spellcheck:"false"});
-  openSheet({title:"New folder",sub:"In "+(S.lib.cwd?"/"+S.lib.cwd:"All files"),content:el("label",{class:"field",style:"margin-top:0"},el("span",null,"Name"),nameIn),actions:[
+  openSheet({title:"New folder",sub:"In "+(S.lib.cwd?"/"+S.lib.cwd:"Repo root"),content:el("label",{class:"field",style:"margin-top:0"},el("span",null,"Name"),nameIn),actions:[
     {label:"Cancel"},
     {label:"Create",kind:"primary",fn:async function(a){
       var n=normPath(nameIn.value); if(!n) throw new Error("Enter a folder name.");
@@ -1613,7 +1631,7 @@ function setOpening(on,text){
 }
 async function exAdd(list){
   for(var i=0;i<list.length;i++){
-    var f=list[i]; setOpening(true,"Opening "+f.name+"…");
+    var f=list[i]; setOpening(true,"Opening "+f.name+"…"); if(S.ex.names.indexOf(f.name)<0) S.ex.names.push(f.name);
     try{
       var done=false;
       if(/\.zip$/i.test(f.name)){
@@ -1712,6 +1730,8 @@ function exBuild(){
   if(dupes) info+=" "+plural(dupes,"file")+" appeared twice. The later one is used.";
   if(S.ex.errors.length) info+=(info?" ":"")+S.ex.errors.join(" ");
   $("zipinfo").textContent=info;
+  var an=$("arcName"); an.replaceChildren();
+  if(S.ex.names.length&&files.length){ an.hidden=false; S.ex.names.forEach(function(n){an.appendChild(el("div",{class:"an"},ico("archive"),el("span",null,n)));}); } else an.hidden=true;
   var any=files.length>0;
   $("upBody").hidden=!any; $("clearUp").hidden=!(S.ex.items.length||S.ex.errors.length||S.ex.locked.length);
   $("pickArch").classList.toggle("pulse",!any&&!S.ex.locked.length);
@@ -1806,7 +1826,7 @@ $("drop").addEventListener("drop",function(e){
 $("clearUp").onclick=function(){
   if(S.ex.running) return;
   S.ex.readers.forEach(function(r){try{r.close();}catch(e){}});
-  S.ex.readers=[];S.ex.items=[];S.ex.errors=[];S.ex.locked=[];S.ex.root=null;
+  S.ex.readers=[];S.ex.items=[];S.ex.errors=[];S.ex.locked=[];S.ex.root=null;S.ex.names=[];$("arcName").hidden=true;
   $("tree").replaceChildren();$("zipinfo").textContent="";$("upBody").hidden=true;$("clearUp").hidden=true;$("plan").replaceChildren();$("exLocked").replaceChildren();
   $("pickArch").classList.add("pulse");
 };
@@ -2055,7 +2075,7 @@ window.addEventListener("resize",fitConn);
 if(document.fonts&&document.fonts.ready) document.fonts.ready.then(fitConn);
 $("newFile").onclick=function(){
   var nameIn=el("input",{placeholder:"notes.md",autocapitalize:"off",autocomplete:"off",spellcheck:"false"});
-  openSheet({title:"New file",sub:"In "+(S.lib.cwd?"/"+S.lib.cwd:"All files"),content:el("label",{class:"field",style:"margin-top:0"},el("span",null,"Name"),nameIn),actions:[
+  openSheet({title:"New file",sub:"In "+(S.lib.cwd?"/"+S.lib.cwd:"Repo root"),content:el("label",{class:"field",style:"margin-top:0"},el("span",null,"Name"),nameIn),actions:[
     {label:"Cancel"},
     {label:"Create",kind:"primary",fn:async function(a){
       var n=normPath(nameIn.value); if(!n) throw new Error("Enter a file name.");
@@ -2089,6 +2109,13 @@ document.addEventListener("contextmenu",function(e){
   if(!ok) e.preventDefault();
 },true);
 $("menuBtn").innerHTML=svg("dots");
+$("lockBtn").innerHTML=svg("lock");
+$("lockBtn").addEventListener("click",function(){
+  if(S.ex.running||uploadBusy){ toast("A job is still running. Stop it first, or wait for it to finish.",true); return; }
+  var sh=$("shell"); sh.classList.add("locking");
+  var ov=el("div",{class:"lockfx"},ico("lock")); document.body.appendChild(ov);
+  setTimeout(function(){ lockNow(); sh.classList.remove("locking"); ov.classList.add("out"); setTimeout(function(){ov.remove();},380); },340);
+});
 $("menuBtn").addEventListener("click",function(){
   var tabs=el("div",{class:"menutabs"},TABS.map(function(t){
     return el("button",{type:"button","aria-current":String(S.tab===t[0]),onclick:function(){closeAllSheets();setTab(t[0]);}},ico(t[2]),t[1]);
@@ -2098,7 +2125,6 @@ $("menuBtn").addEventListener("click",function(){
     el("div",{class:"field",style:"margin:6px 0 2px"},el("span",null,"Appearance"),seg([["light","Light"],["dark","Dark"],["night","Night"]],S.opts.theme||"dark",function(v){applyTheme(v);})),
     el("div",{class:"field",style:"margin:6px 0 2px"},el("span",null,"Lock after no activity"),seg([["1","1 min"],["2","2 min"],["5","5 min"],["15","15 min"],["0","Never"]],String(S.opts.autoLock),function(v){S.opts.autoLock=+v;savePrefs();bump();})),
     shrinkControls(),
-    switchRow("Show app files",!S.opts.hideApp,function(v){S.opts.hideApp=!v;savePrefs();buildIndex();renderLibrary();renderSide();},"The files that make this app run (index.html and the app folder). They show with an app tag. Be careful changing them."),
     switchRow("Keep opened files for offline use",!!S.opts.offline,function(v){S.opts.offline=v;savePrefs();if(!v)clearOffline();},"Saves files you open on this device, unencrypted, so they open without a connection. Turn off on a shared device."),
     el("div",{style:"display:grid;gap:10px;margin-top:8px"},
       deferredInstall?el("button",{class:"btn block",type:"button",onclick:function(){closeAllSheets();deferredInstall.prompt();deferredInstall=null;}},"Install this app"):null,

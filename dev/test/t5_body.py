@@ -5,7 +5,7 @@ def check(c,m):
 def toast(page,txt,t=60000): page.wait_for_function("t=>Array.from(document.querySelectorAll('.toast')).some(e=>e.textContent.includes(t))",arg=txt,timeout=t)
 def tab(page,n):
     if page.locator(f"#sideNav [data-tab={n}]").first.is_visible(): page.locator(f"#sideNav [data-tab={n}]").first.click(); return
-    page.click("#menuBtn"); page.locator(".layer.open .menutabs button",has_text=n.capitalize()).click(); page.wait_for_timeout(350)
+    OPENMENU(); page.locator(".layer.open .menutabs button",has_text=n.capitalize()).click(); page.wait_for_timeout(350)
 def rows(page): return page.locator("#libList .row .name").all_inner_texts()
 def sheet_click(page,label): page.locator(".layer.open .foot .btn",has_text=label).last.click()
 def cur_text(path): return blob_data[cur()[path]["sha"]]
@@ -27,10 +27,10 @@ with sync_playwright() as p:
     page.screenshot(path=SHOTS+"/v5_home_empty.png")
     page.click("#homeAdd"); page.wait_for_selector("#s-setup:not([hidden])")
     # bad token is refused with a clear message
-    page.fill("#cfgOwner","me"); page.fill("#cfgRepo","qp"); page.fill("#cfgToken","nope"); page.fill("#cfgPass",PW); page.fill("#cfgPass2",PW)
+    page.fill("#cfgOwner","me"); page.fill("#cfgRepo","qp"); page.fill("#cfgToken","nope"); page.fill("#cfgPass",PW)
     page.click("#setupGo"); page.wait_for_function("document.getElementById('setupErr').textContent.length>0")
     check("token" in page.inner_text("#setupErr"),"bad token message: "+page.inner_text("#setupErr"))
-    page.fill("#cfgRepo","nothere"); page.fill("#cfgToken","test-token"); page.fill("#cfgPass",PW); page.fill("#cfgPass2",PW)
+    page.fill("#cfgRepo","nothere"); page.fill("#cfgToken","test-token"); page.fill("#cfgPass",PW)
     page.click("#setupGo"); page.wait_for_function("document.getElementById('setupErr').textContent.includes('find')")
     check(True,"unknown repository is refused")
     # save (no passcode) and stay on home
@@ -44,15 +44,15 @@ with sync_playwright() as p:
     LOGIN()
     check(page.inner_text("#connName")=="me/qp","no-passcode login opens the repo directly")
     # log out, reload: remembers last selection and still opens
-    page.click("#menuBtn"); sheet_click(page,"Close") if False else None
+    OPENMENU(); sheet_click(page,"Close") if False else None
     page.locator(".layer.open .btn",has_text="Log out").click(); page.wait_for_selector("#s-home:not([hidden])")
     page.wait_for_timeout(900); page.reload(); page.wait_for_selector("#s-home:not([hidden])")
     check("me/qp" in page.locator("#homeSel option:checked").inner_text(),"remembered after reload")
     # add a second repo with a passcode and open it via Save and open
-    page.click("#homeAdd"); page.fill("#cfgOwner","me"); page.fill("#cfgRepo","qp2"); page.fill("#cfgToken","test-token"); page.fill("#cfgPass","1234"); page.fill("#cfgPass2","1234")
+    page.click("#homeAdd"); page.fill("#cfgOwner","me"); page.fill("#cfgRepo","qp2"); page.fill("#cfgToken","test-token"); page.fill("#cfgPass","1234")
     page.click("#setupOpen"); page.wait_for_selector("#shell:not([hidden])")
     check(page.inner_text("#connName")=="me/qp2","Save and open enters the repo")
-    page.click("#menuBtn"); page.locator(".layer.open .btn",has_text="Log out").click(); page.wait_for_selector("#s-home:not([hidden])")
+    OPENMENU(); page.locator(".layer.open .btn",has_text="Log out").click(); page.wait_for_selector("#s-home:not([hidden])")
     check(page.locator("#homeSel option").count()==2,"two saved repos listed")
     check("me/qp2" in page.locator("#homeSel option:checked").inner_text(),"last used repo is preselected")
     # passcode login: wrong then right
@@ -225,13 +225,8 @@ with sync_playwright() as p:
     page.screenshot(path=SHOTS+"/v4_11_code.png"); close_viewer()
 
     # ---- hide / show app files ----
-    page.click("#menuBtn"); page.locator(".layer.open label", has_text="Show app files").click(); sheet_click(page,"Close")
     page.locator("#libCrumbs button").first.click()
-    check("index.html" not in " ".join(rows(page)), "app files hidden after toggle")
-    page.click("#menuBtn"); page.locator(".layer.open label", has_text="Show app files").click(); sheet_click(page,"Close")
-    page.locator("#libCrumbs button").first.click()
-    check("index.html" in " ".join(rows(page)), "app files back after toggle")
-    # delete warns about app files
+    check("index.html" in " ".join(rows(page)), "app files always shown")
     page.locator("#libList .row",has_text="index.html").locator("input").check(); page.click("#actDel"); page.wait_for_selector(".layer.open .warnbox")
     check(True,"deleting app files shows a warning"); sheet_click(page,"Cancel"); page.locator("#libList .row",has_text="index.html").locator("input").uncheck()
     page.click("#sortBtn"); page.locator(".layer.open .seg button", has_text="Size").click(); sheet_click(page,"Done")
@@ -257,7 +252,7 @@ with sync_playwright() as p:
     tab(page,"files")
 
     # ---- manage saved repositories: typed confirm ----
-    page.click("#menuBtn"); page.locator(".layer.open .btn",has_text="Saved repositories").click(); page.wait_for_selector(".layer.open .row")
+    OPENMENU(); page.locator(".layer.open .btn",has_text="Saved repositories").click(); page.wait_for_selector(".layer.open .row")
     check(page.locator(".layer.open .row").count()==2,"manage lists both saved repos")
     check(page.locator(".layer.open .foot .btn",has_text="Delete").is_disabled(),"delete disabled until something is selected")
     page.locator(".layer.open .row",has_text="me/qp2").locator("input").check()
@@ -270,28 +265,28 @@ with sync_playwright() as p:
     check(page.evaluate("JSON.parse(localStorage.getItem('a_profiles')).list.length")==1,"one saved repo left")
     check(page.inner_text("#connName")=="me/qp","still in the open repo")
     # deleting the open repo signs out
-    page.click("#menuBtn"); page.locator(".layer.open .btn",has_text="Saved repositories").click(); page.wait_for_selector(".layer.open .row")
+    OPENMENU(); page.locator(".layer.open .btn",has_text="Saved repositories").click(); page.wait_for_selector(".layer.open .row")
     page.locator(".layer.open .row",has_text="me/qp").locator("input").check(); page.locator(".layer.open .foot .btn",has_text="Delete 1 selected").click()
     page.fill(".layer.open input[aria-label='Type confirm']","CONFIRM"); page.locator(".layer.open .foot .btn",has_text="Delete").last.click()
     page.wait_for_selector("#s-home:not([hidden])")
     check(page.locator("#homeSel").is_disabled(),"deleting the last repo returns to the empty home")
 
     # ---- reset this device: outside and inside ----
-    page.click("#homeAdd"); page.fill("#cfgOwner","me"); page.fill("#cfgRepo","qp"); page.fill("#cfgToken","test-token"); page.fill("#cfgPass",PW); page.fill("#cfgPass2",PW)
+    page.click("#homeAdd"); page.fill("#cfgOwner","me"); page.fill("#cfgRepo","qp"); page.fill("#cfgToken","test-token"); page.fill("#cfgPass",PW)
     page.click("#setupGo"); page.wait_for_selector("#s-home:not([hidden])")
     page.click("#homeReset"); page.wait_for_selector(".layer.open input[aria-label='Type confirm']")
     check(page.locator(".layer.open .foot .btn",has_text="Reset").is_disabled(),"reset (home) needs typing confirm")
     sheet_click(page,"Cancel"); page.wait_for_timeout(350)
     check(page.evaluate("JSON.parse(localStorage.getItem('a_profiles')).list.length")==1,"cancelling reset keeps the data")
     LOGIN()
-    page.click("#menuBtn"); page.locator(".layer.open .btn",has_text="Reset this device").click(); page.wait_for_selector(".layer.open input[aria-label='Type confirm']")
+    OPENMENU(); page.locator(".layer.open .btn",has_text="Reset this device").click(); page.wait_for_selector(".layer.open input[aria-label='Type confirm']")
     check(page.locator(".layer.open .foot .btn",has_text="Reset").is_disabled(),"reset (inside) needs typing confirm")
     page.fill(".layer.open input[aria-label='Type confirm']","confirm"); sheet_click(page,"Reset")
     page.wait_for_selector("#s-home:not([hidden])")
     check(page.evaluate("localStorage.getItem('a_profiles')")in(None,'{"v":2,"last":null,"list":[]}') or page.evaluate("JSON.parse(localStorage.getItem('a_profiles')||'{\"list\":[]}').list.length")==0,"reset clears saved repos")
     check(page.locator("#homeSel").is_disabled(),"empty home after reset")
     # re-add and keep going for the screenshots
-    page.click("#homeAdd"); page.fill("#cfgOwner","me"); page.fill("#cfgRepo","qp"); page.fill("#cfgToken","test-token"); page.fill("#cfgPass",PW); page.fill("#cfgPass2",PW)
+    page.click("#homeAdd"); page.fill("#cfgOwner","me"); page.fill("#cfgRepo","qp"); page.fill("#cfgToken","test-token"); page.fill("#cfgPass",PW)
     page.click("#setupOpen"); page.wait_for_selector("#libList .row")
 
     # ---- save as copy: _1, then _2, in the same folder ----
@@ -322,7 +317,7 @@ with sync_playwright() as p:
     tab(page,"history"); page.wait_for_timeout(300)
     page.go_back(); page.wait_for_timeout(400)
     check(page.locator("#tab-files").is_visible() and page.locator("#tab-history").is_hidden(),"back leaves History tab")
-    page.click("#menuBtn"); page.wait_for_selector(".layer.open")
+    OPENMENU(); page.wait_for_selector(".layer.open")
     page.go_back(); page.wait_for_timeout(500)
     check(page.locator(".layer.open").count()==0,"back closes the menu")
     openf("Docs/notes.md"); page.wait_for_timeout(300)
@@ -339,7 +334,7 @@ with sync_playwright() as p:
     check(page.locator("#s-home").is_visible() and "Press back again to leave" in page.inner_text("#toasts"),"first back on the login screen stays")
     LOGIN()
 
-    page.screenshot(path=SHOTS+"/v6_files.png"); page.click("#menuBtn"); page.wait_for_timeout(500); page.screenshot(path=SHOTS+"/v6_menu.png"); sheet_click(page,"Close"); page.wait_for_timeout(400)
+    page.screenshot(path=SHOTS+"/v6_files.png"); OPENMENU(); page.wait_for_timeout(500); page.screenshot(path=SHOTS+"/v6_menu.png"); sheet_click(page,"Close"); page.wait_for_timeout(400)
     # ---- header: icon buttons on the title line, smooth search ----
     page.wait_for_selector("#libList .row")
     tt=page.locator(".pagehead .page-title").bounding_box(); ad=page.locator("#addFiles").bounding_box()
@@ -360,14 +355,14 @@ with sync_playwright() as p:
 
     # ---- themes ----
     def theme(name):
-        page.click("#menuBtn"); page.wait_for_selector(".layer.open")
+        OPENMENU(); page.wait_for_selector(".layer.open")
         page.locator(".layer.open button",has_text=name).first.click(); page.wait_for_timeout(300)
         sheet_click(page,"Close"); page.wait_for_timeout(350)
     bg=lambda: page.evaluate("getComputedStyle(document.body).backgroundColor")
     check(page.evaluate("document.documentElement.dataset.theme")=="dark" and bg()=="rgb(6, 9, 20)","dark is the default")
     theme("Night"); check(bg()=="rgb(0, 0, 0)","night is pitch black"); page.screenshot(path=SHOTS+"/v7_night.png")
     theme("Light"); check(bg()=="rgb(255, 255, 255)","light is white"); page.screenshot(path=SHOTS+"/v7_light.png")
-    page.click("#menuBtn"); page.wait_for_timeout(500); page.screenshot(path=SHOTS+"/v7_menu_light.png"); sheet_click(page,"Close"); page.wait_for_timeout(350)
+    OPENMENU(); page.wait_for_timeout(500); page.screenshot(path=SHOTS+"/v7_menu_light.png"); sheet_click(page,"Close"); page.wait_for_timeout(350)
     theme("Night"); page.wait_for_timeout(900); page.reload(); page.wait_for_selector("#s-home:not([hidden])")
     check(page.evaluate("document.documentElement.dataset.theme")=="night","theme is remembered after reload")
     LOGIN(); theme("Dark")
@@ -375,7 +370,7 @@ with sync_playwright() as p:
     # ---- no right click, except in typing fields ----
     ctx=lambda sel: page.evaluate("s=>{var e=new MouseEvent('contextmenu',{bubbles:true,cancelable:true});document.querySelector(s).dispatchEvent(e);return e.defaultPrevented;}",sel)
     check(ctx("#libList .row") is True and ctx("#menuBtn") is True and ctx("#pane") is True,"right click blocked on the page")
-    page.click("#menuBtn"); page.locator(".layer.open .btn",has_text="Edit details").click(); page.wait_for_selector("#s-setup:not([hidden])")
+    OPENMENU(); page.locator(".layer.open .btn",has_text="Edit details").click(); page.wait_for_selector("#s-setup:not([hidden])")
     check(all(ctx(s) is False for s in ["#cfgOwner","#cfgRepo","#cfgBranch","#cfgToken","#cfgPass"]),"right click allowed in the account fields")
     check(ctx("#setupGo") is True,"right click blocked on setup buttons")
     page.click("#setupCancel"); page.wait_for_selector("#shell:not([hidden])")
@@ -468,7 +463,7 @@ with sync_playwright() as p:
     errors=[e for e in errors if "sandboxed" not in e and not e.startswith("Failed to load resource")]
     check(not errors,"no console errors: %s"%errors[:5])
     # ---- leaving: two quick backs from the login screen ----
-    page.click("#menuBtn"); page.locator(".layer.open .btn",has_text="Log out").click(); page.wait_for_selector("#s-home:not([hidden])"); page.wait_for_timeout(900)
+    OPENMENU(); page.locator(".layer.open .btn",has_text="Log out").click(); page.wait_for_selector("#s-home:not([hidden])"); page.wait_for_timeout(900)
     page.go_back(); page.wait_for_timeout(500)
     check(page.locator("#s-home").is_visible(),"one back on the login screen stays")
     page.go_back(); page.wait_for_timeout(800)

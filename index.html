@@ -18,6 +18,7 @@
 <body>
 
 <div class="aurora" aria-hidden="true"></div>
+<button type="button" class="fhome" id="fHome" aria-label="Go to Files" title="Files"></button>
 <div id="toasts" aria-live="polite"></div>
 <div id="sheetRoot"></div>
 
@@ -49,8 +50,7 @@
     <label class="field" id="passRow"><span>Passcode</span>
       <div class="pw"><input id="cfgPass" type="password" placeholder="Choose your own passcode" autocomplete="new-password" autocapitalize="off" spellcheck="false"><button type="button" class="ibtn" id="passEye" aria-label="Show or hide passcode"></button></div>
     </label>
-    <label class="field" id="pass2Row"><span>Repeat passcode</span><input id="cfgPass2" type="password" placeholder="Type it again" autocomplete="new-password" autocapitalize="off" spellcheck="false"></label>
-    <p class="hint" id="passHint">Required. Use any length, letters, numbers or symbols you like. You enter it each time you log in, and your token is encrypted with it. It can't be recovered if forgotten; you would delete the saved repository and add it again.</p>
+    <p class="hint" id="passHint">Required. Use any length, letters, numbers or symbols you like. Tap the eye to check what you typed. You enter it each time you log in, and your token is encrypted with it. It can't be recovered if forgotten; you would delete the saved repository and add it again.</p>
     <p class="err" id="setupErr" role="alert"></p>
     <button class="btn primary block" type="submit" id="setupGo">Save</button>
     <button class="btn block" type="button" id="setupOpen" style="margin-top:10px">Save and open</button>
@@ -64,7 +64,7 @@
     <header class="titlebar">
       <div class="brand"><span class="mk" data-ico="mark"></span><span class="grad-text">Atlas</span></div>
       <button type="button" class="conn" id="connBtn" title="Switch repository" aria-label="Switch repository"><i class="dot" id="connDot"></i><span class="t" id="connName"></span></button>
-      <button class="ibtn" id="menuBtn" aria-label="Menu"></button>
+      <button class="ibtn" id="lockBtn" type="button" aria-label="Lock now" title="Lock now"></button>
     </header>
 
     <div class="wbody">
@@ -87,6 +87,7 @@
               <button class="tb" id="newFolder" type="button"></button>
               <button class="tb" id="newFile" type="button"></button>
               <button class="tb primary" id="addFiles" type="button"></button>
+              <button class="tb" id="menuBtn" type="button" aria-label="Menu" title="Menu"></button>
             </div>
           </div>
           <p class="page-sub" id="libStat">Loading</p>
@@ -102,7 +103,7 @@
 
         <!-- Extract -->
         <section id="tab-extract" hidden>
-          <h1 class="page-title">Extract</h1>
+          <h1 class="page-title" id="exTitle">Extract</h1>
           <p class="page-sub">Open an archive, choose what to keep, and unpack it into a folder.</p>
           <div id="exLocked"></div>
           <div class="drop" id="drop">
@@ -142,6 +143,7 @@
                 <button class="btn sm" id="expAll" type="button">Open all</button>
                 <button class="btn sm" id="colAll" type="button">Close all</button>
               </div>
+              <div class="arcname" id="arcName" hidden></div>
               <div class="list scroll" id="tree"></div>
               <p class="muted small" id="summary" style="margin-top:10px"></p>
               <div class="chips" id="plan"></div>
@@ -168,7 +170,7 @@
 
         <!-- History -->
         <section id="tab-history" hidden>
-          <h1 class="page-title">History</h1>
+          <h1 class="page-title" id="hiTitle">History</h1>
           <p class="page-sub">Every change is saved. Undo the latest one if it wasn't what you meant.</p>
           <div class="toolbar"><button class="btn sm" id="actRefresh" type="button">Refresh</button></div>
           <div id="actList"></div>

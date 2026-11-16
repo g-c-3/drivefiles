@@ -85,7 +85,7 @@ Add as many as you like. **Saved** lists them as `account/repo`, is greyed out u
 Every saved repository has a passcode, and **you choose what it is**. There is no minimum length and no rule about numbers or symbols. One character works, though a longer one is safer.
 
 - Your token is encrypted with the passcode (PBKDF2-SHA256, **600,000 rounds**, then AES-256-GCM) before it is saved. Nobody can open it without the passcode, **including you if you forget it**. You would delete that saved repository and add it again.
-- On the setup screen, the **eye** shows the passcode. While it is hidden you type it twice to catch typos; while it is shown, the second box goes away.
+- There is one passcode box with an **eye** to show what you typed, so you can check it. There is no repeat box.
 - On the login window press **Enter** to log in. Password managers are told it is a new / current password, so they can fill it in for you.
 - There is **no fingerprint or face unlock**. The passcode is the only way in.
 - Repositories saved by an older version without a passcode ask you to choose one the first time you log in, and are encrypted with it from then on.
@@ -96,7 +96,8 @@ Your details never leave the device except to GitHub.
 
 ## Moving around
 
-- **Files, Extract and History** are at the top of the **⋮ menu**, with the **Light / Dark / Night** switch beneath them. Dark is the default, Light is white, and Night is pure black for OLED screens. Your choice is remembered.
+- The **⋮ menu** button is the last button on the Files line, right after Add files. It holds Files, Extract and History, the **Light / Dark / Night** switch and the settings. The **lock** button at the top right locks Atlas straight away, with a short fade, and returns to the login screen.
+- On **Extract** and **History** a floating **Home** button sits level with the page title and stays in place while you scroll. Tap it to go to Files. Dark is the default, Light is white, and Night is pure black for OLED screens. Your choice is remembered.
 - The **Back button or gesture** works inside the app: it closes a window or the viewer, goes up a folder, or leaves a tab, instead of leaving the site. At the top of a repository, press Back twice to log out and return to the login screen. On the login screen, one Back stays put and two quick Backs leave to the page you came from. Back is refused while a job is running.
 - **Right-click is switched off** across the app, except in fields where you type (names, token, passcode, limit, the editor). This only removes the browser's menu; it doesn't protect anything.
 

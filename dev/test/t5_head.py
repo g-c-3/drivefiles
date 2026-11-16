@@ -138,3 +138,8 @@ def LOGIN(pw=None):
     page.click("#homeLogin"); page.wait_for_selector(".layer.open input[type=password]")
     page.fill(".layer.open input[type=password]", pw or PW); page.keyboard.press("Enter")
     page.wait_for_selector("#libList .row")
+
+def OPENMENU():
+    if not page.locator("#menuBtn").is_visible():
+        page.click("#fHome"); page.wait_for_selector("#tab-files:not([hidden])"); page.wait_for_timeout(450)
+    page.click("#menuBtn")
