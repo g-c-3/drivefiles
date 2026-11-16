@@ -90,11 +90,10 @@ function close(silent){
   if(root.hidden) return;
   var go=function(){
     teardown();root.hidden=true;document.documentElement.classList.remove("vopen");V.item=null;
-    if(V.pushed){V.pushed=false;if(!silent){try{history.back();}catch(e){}}}
+    if(V.nav){window.AtlasNav.drop(V.nav);V.nav=null;} V.pushed=false;
   };
   if(silent){V.dirty=false;go();}else confirmDiscard(go);
 }
-window.addEventListener("popstate",function(){if(!root.hidden&&V.pushed){V.pushed=false;if(V.dirty){history.pushState({v:1},"");V.pushed=true;confirmDiscard(function(){close();});}else close(true);}});
 document.addEventListener("keydown",function(e){
   if(root.hidden) return;
   if((e.ctrlKey||e.metaKey)&&e.key==="s"&&V.dirty){e.preventDefault();save().catch(function(){});}
@@ -118,7 +117,7 @@ async function load(item){
   var token=++V.token;
   teardown();V.item=item;item.kind=kindOf(item.name);
   root.hidden=false;document.documentElement.classList.add("vopen");
-  if(!V.pushed){try{history.pushState({v:1},"");V.pushed=true;}catch(e){}}
+  if(!V.nav&&window.AtlasNav){V.pushed=true;V.nav=window.AtlasNav.push(function(){ if(V.dirty){ confirmDiscard(function(){close(true);}); return false; } close(true); },"viewer");}
   titleEl.textContent=item.name;
   subEl.textContent=(item.real&&item.path.indexOf("/")>0?item.path.slice(0,item.path.lastIndexOf("/"))+"  ·  ":"")+H.fmt(item.size||0);
   if(item.real){V.siblings=H.siblings(item.path);V.sibIdx=V.siblings.indexOf(item.path);}else{V.siblings=[];V.sibIdx=-1;}

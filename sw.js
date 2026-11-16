@@ -1,5 +1,5 @@
 /* Atlas service worker: keeps the app files for offline use. Never touches api.github.com. */
-const VERSION="atlas-c5324b7e4f";
+const VERSION="atlas-0ca98f1f21";
 const PRECACHE=["./", "app/app.css", "app/app.js", "app/convert.js", "app/icons/icon-192.png", "app/icons/icon-512.png", "app/icons/icon.svg", "app/vendor/7zz.wasm", "app/vendor/edit.js", "app/vendor/office.js", "app/vendor/pdf/pdf.min.mjs", "app/vendor/pdf/pdf.worker.min.mjs", "app/vendor/pptx-template.js", "app/vendor/view.js", "app/vendor/w7worker.js", "app/vendor/zip.min.js", "app/viewer.js", "index.html", "manifest.webmanifest"];
 self.addEventListener("install",e=>{
   e.waitUntil((async()=>{const c=await caches.open(VERSION);await Promise.all(PRECACHE.map(u=>c.add(new Request(u,{cache:"reload"})).catch(()=>{})));self.skipWaiting();})());

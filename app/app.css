@@ -9,7 +9,7 @@
   --warn:#a85f00; --warn-soft:rgba(255,170,40,.18); --danger:#d6334a; --danger-soft:rgba(240,60,90,.12); --ok:#13875a;
   --shadow:0 24px 70px -20px rgba(40,50,140,.35), 0 4px 14px rgba(40,50,140,.10);
   --float:0 16px 44px -10px rgba(30,40,110,.45), 0 2px 8px rgba(30,40,110,.14);
-  --nav:66px;
+  --nav:0px;
 }
 @media (prefers-color-scheme:dark){:root{
   --bg:#060914; --ink:#e9eeff; --muted:#92a0c8; --line:rgba(150,170,255,.14);
@@ -400,3 +400,7 @@ button.conn:hover{filter:brightness(1.06)}
 .tag.app{background:var(--sunk);color:var(--muted)}
 .tile{width:40px;height:40px;border-radius:12px;display:grid;place-items:center;background:var(--sunk);color:var(--accent);flex:none}
 .warnbox{margin-top:10px;padding:10px 12px;border-radius:12px;background:var(--warn-soft);color:var(--warn);font-size:.9rem}
+
+.menutabs{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;background:var(--sunk);padding:4px;border-radius:16px;margin-bottom:8px}
+.menutabs button{display:flex;flex-direction:column;align-items:center;gap:2px;padding:9px 0 7px;border:0;border-radius:12px;background:transparent;color:var(--muted);font-weight:650;font-size:.82rem}
+.menutabs button[aria-current=true]{background:var(--glass2);color:var(--accent);box-shadow:0 4px 16px -6px var(--glow)}

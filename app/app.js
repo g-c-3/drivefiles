@@ -28,7 +28,7 @@ var ICONS={
  lock:'<rect x="5" y="11" width="14" height="9" rx="2.5"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
  search:'<circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/>',
  refresh:'<path d="M20 11a8 8 0 0 0-14.5-3.5"/><path d="M5 3.5v4h4"/><path d="M4 13a8 8 0 0 0 14.5 3.5"/><path d="M19 20.5v-4h-4"/>',
- dots:'<circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/>',
+ dots:'<circle cx="12" cy="5" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="12" cy="19" r="1.7"/>',
  x:'<path d="M6 6l12 12M18 6 6 18"/>',
  chev:'<path d="m9 6 6 6-6 6"/>',
  home:'<path d="M4 11 12 4l8 7"/><path d="M6 10v10h12V10"/>',
@@ -96,12 +96,13 @@ function cleanSegs(p){
   return parts;
 }
 function normPath(p){var s=cleanSegs(p);return s?s.join("/"):null;}
+function copyBase(stem){var m=stem.match(/^(.*)_(\d{1,3})$/);return (m&&m[1])?{b:m[1],n:+m[2]}:{b:stem,n:0};}
 function nthPath(path,n,isDir){
   var i=path.lastIndexOf("/"), dir=i>=0?path.slice(0,i+1):"", base=path.slice(i+1);
   var dot=isDir?-1:base.lastIndexOf("."), stem=dot>0?base.slice(0,dot):base, ext=dot>0?base.slice(dot):"";
-  return dir+stem+"_"+n+ext;
+  return dir+copyBase(stem).b+"_"+n+ext;
 }
-function uniquePath(path,taken,isDir){for(var n=1;;n++){var c=nthPath(path,n,isDir);if(!taken(c)) return c;}}
+function uniquePath(path,taken,isDir){var bs=path.slice(path.lastIndexOf("/")+1), dt=isDir?-1:bs.lastIndexOf("."), start=copyBase(dt>0?bs.slice(0,dt):bs).n+1;for(var n=start;;n++){var c=nthPath(path,n,isDir);if(!taken(c)) return c;}}
 function hasAncestor(p,set){var i=p.lastIndexOf("/");while(i>0){if(set.has(p.slice(0,i)))return true;i=p.lastIndexOf("/",i-1);}return false;}
 function isSel(p,set){return set.has(p)||hasAncestor(p,set);}
 function isKeep(p){return basename(p)===".gitkeep";}
@@ -118,9 +119,49 @@ var S={
   ex:{readers:[],items:[],errors:[],root:null,locked:[],dest:"",destTouched:false,running:false,cancel:false,opening:false},
   lib:{cwd:"",sel:new Set(),q:"",exp:new Set()},
   act:{loaded:false,list:[]},
-  opts:{filePolicy:"skip",folderPolicy:"merge",strip:false,limit:48,sortKey:"name",sortDir:"asc",hideApp:false,offline:false}
+  opts:{filePolicy:"skip",folderPolicy:"merge",strip:false,limit:49,sortKey:"name",sortDir:"asc",hideApp:false,offline:false}
 };
 var VK="a_vault", PK="a_prefs", lastWrite=0, hiddenAt=0;
+
+/* ================= back button / gesture ================= */
+/* Every in-app step (a sheet, a viewer, a folder, a tab, a screen) is one entry in this stack, mirrored by one browser history entry.
+   Back closes the newest step instead of leaving the site. */
+var Nav={st:[],hd:0,pend:false,t:null,g:null,lastRoot:0};
+Nav.push=function(close,kind){var e={close:close,kind:kind||""};Nav.st.push(e);Nav.sched();return e;};
+Nav.drop=function(e){var i=Nav.st.indexOf(e);if(i>=0){Nav.st.splice(i,1);Nav.sched();}};
+Nav.dropKind=function(k){var n=Nav.st.length;Nav.st=Nav.st.filter(function(e){return e.kind!==k;});if(Nav.st.length!==n)Nav.sched();};
+Nav.has=function(k){return Nav.st.some(function(e){return e.kind===k;});};
+Nav.clear=function(){if(Nav.st.length){Nav.st=[];Nav.sched();}};
+Nav.sched=function(){if(!Nav.t)Nav.t=setTimeout(Nav.sync,0);};
+Nav.sync=function(){
+  Nav.t=null; if(Nav.pend) return;
+  var want=Nav.st.length;
+  try{
+    if(want>Nav.hd){ while(Nav.hd<want){Nav.hd++;history.pushState({atlas:1,d:Nav.hd},"");} }
+    else if(want<Nav.hd){
+      Nav.pend=true; var by=want-Nav.hd; Nav.hd=want; history.go(by);
+      Nav.g=setTimeout(function(){Nav.pend=false;Nav.sched();},700);
+    }
+  }catch(e){ Nav.pend=false; }
+};
+window.addEventListener("popstate",function(e){
+  if(Nav.pend){ Nav.pend=false; clearTimeout(Nav.g); Nav.sched(); return; }
+  var d=(e.state&&e.state.d)||0; Nav.hd=d;
+  while(Nav.st.length>d){
+    var top=Nav.st.pop(), r;
+    try{ r=top.close(); }catch(x){ r=undefined; }
+    if(r===false){ Nav.st.push(top); break; }
+  }
+  Nav.sched();
+});
+window.AtlasNav=Nav;
+Nav.hd=(history.state&&history.state.d)||0; Nav.sched();
+function sessionBack(){
+  if(S.ex.running||uploadBusy){ toast("A job is still running. Stop it first, or wait for it to finish.",true); return false; }
+  var now=Date.now();
+  if(now-Nav.lastRoot>2500){ Nav.lastRoot=now; toast("Press back again to log out"); return false; }
+  lockNow();
+}
 
 /* ================= storage: saved repositories ================= */
 var CAN_CRYPTO=!!(window.crypto&&crypto.subtle);
@@ -197,13 +238,16 @@ async function openProfile(p,pass){
   if(p.kind==="device"){ var k=await deviceKey(false); if(!k) throw new Error("key missing"); return openWith(k,p.enc); }
   return openWith(await deriveKey(pass,unb64(p.enc.s)),p.enc);
 }
-function loadPrefs(){try{Object.assign(S.opts,JSON.parse(localStorage.getItem(PK)||"{}"));}catch(e){}}
+function loadPrefs(){try{Object.assign(S.opts,JSON.parse(localStorage.getItem(PK)||"{}"));}catch(e){} if(S.opts.limit===48) S.opts.limit=49; S.opts.folderPolicy="merge";}
 function savePrefs(){try{localStorage.setItem(PK,JSON.stringify(S.opts));}catch(e){}}
 
 /* ================= screens ================= */
 function showScreen(name){
   ["s-home","s-setup","shell"].forEach(function(id){$(id).hidden=(id!==name);});
   window.scrollTo(0,0);
+  if(name==="s-home") Nav.clear();
+  else if(name==="s-setup"){ Nav.dropKind("setup"); Nav.push(function(){ if(S.cfg&&editingId) showScreen("shell"); else showHome(); },"setup"); }
+  else if(name==="shell"){ Nav.dropKind("setup"); if(!Nav.has("session")){ Nav.st.unshift({close:sessionBack,kind:"session"}); Nav.sched(); } }
 }
 function curProfile(){return S.pid?findProf(S.pid):null;}
 function lockNow(){
@@ -417,6 +461,7 @@ document.addEventListener("visibilitychange",function(){
 var sheetStack=[];
 function closeLayer(layer){
   var i=sheetStack.indexOf(layer); if(i<0) return; sheetStack.splice(i,1);
+  if(layer._nav){ Nav.drop(layer._nav); layer._nav=null; }
   layer.classList.remove("open");
   setTimeout(function(){ if(layer.parentNode) layer.parentNode.removeChild(layer); },300);
   if(layer._onClose) layer._onClose();
@@ -449,6 +494,7 @@ function openSheet(o){
     el("div",{class:"body"},o.content), errEl, o.noFooter?null:foot);
   layer.append(el("div",{class:"backdrop",onclick:function(){if(!layer._locked)closeLayer(layer);}}),panel);
   $("sheetRoot").appendChild(layer); sheetStack.push(layer);
+  layer._nav=Nav.push(function(){ if(layer._locked) return false; closeLayer(layer); },"sheet");
   requestAnimationFrame(function(){requestAnimationFrame(function(){layer.classList.add("open");});});
   return api;
 }
@@ -466,13 +512,16 @@ function seg(opts,value,onChange){
 /* ================= tabs, sidebar, menu ================= */
 var TABS=[["files","Files","files"],["extract","Extract","archive"],["history","History","clock"]];
 function buildTabs(){
-  var side=$("sideNav"), bot=$("tabsBottom"); side.replaceChildren(); bot.replaceChildren();
+  var side=$("sideNav"); side.replaceChildren();
   TABS.forEach(function(t){
     side.appendChild(el("button",{type:"button","data-tab":t[0],onclick:function(){setTab(t[0]);}},ico(t[2]),t[1]));
-    bot.appendChild(el("button",{type:"button","data-tab":t[0],onclick:function(){setTab(t[0]);}},ico(t[2]),t[1]));
   });
 }
 function setTab(name){
+  viewNav(S.lib.cwd,name);
+  setTabRaw(name);
+}
+function setTabRaw(name){
   S.tab=name;
   TABS.forEach(function(t){$("tab-"+t[0]).hidden=(t[0]!==name);});
   document.querySelectorAll("[data-tab]").forEach(function(b){b.setAttribute("aria-current",String(b.getAttribute("data-tab")===name));});
@@ -585,7 +634,7 @@ function enterApp(){
   showScreen("shell"); buildTabs(); hydrateIcons();
   S.lib.sel.clear(); S.lib.cwd=""; S.lib.q=""; $("libSearch").value=""; S.ex.destTouched=false; S.ex.dest="";
   $("connName").textContent=S.cfg.repo; $("connDot").classList.remove("off");
-  setTab("files"); loadRepo();
+  Nav.dropKind("view"); setTabRaw("files"); loadRepo();
 }
 
 /* ================= folder helpers ================= */
@@ -593,11 +642,24 @@ function childDirs(dir){
   var m=S.repo.index.get(dir); if(!m) return [];
   return Array.from(m.values()).filter(function(e){return e.dir;}).sort(function(a,b){return a.name.localeCompare(b.name,undefined,{numeric:true});});
 }
+function viewBack(c,t){return function(){ goDirRaw(c); setTabRaw(t); };}
+function viewNav(c,t){
+  var cc=S.lib.cwd, ct=S.tab, i;
+  if(c===cc&&t===ct) return;
+  for(i=Nav.st.length-1;i>=0&&Nav.st[i].kind==="view";i--){
+    var f=Nav.st[i].from; if(f.c===c&&f.t===t){ Nav.st.length=i; Nav.sched(); return; }
+  }
+  var e=Nav.push(viewBack(cc,ct),"view"); e.from={c:cc,t:ct};
+}
 function goDir(path){
+  viewNav(path,"files");
+  goDirRaw(path);
+}
+function goDirRaw(path){
   S.lib.cwd=path; S.lib.q=""; $("libSearch").value="";
   var parts=path?path.split("/"):[], acc="";
   parts.forEach(function(p){acc=joinPath(acc,p);S.lib.exp.add(acc);});
-  setTab("files");
+  setTabRaw("files");
 }
 function renderSide(){
   var box=$("sideTree"); box.replaceChildren();
@@ -843,7 +905,7 @@ function moveCopySheet(mode){
     ft?el("div",{class:"field",style:"margin-top:0"},el("span",null,isCopy?"Copy to":"Move to"),ft.el):null,
     nameIn?el("label",{class:"field"},el("span",null,"Name"),nameIn):null,
     isRen?null:el("div",{class:"field"},el("span",null,"If something is already there"),
-      seg([["skip","Skip"],["rename","Keep both"],["replace","Replace"]],policy,function(v){policy=v;})));
+      seg([["skip","Skip"],["rename","Save as copy"],["replace","Replace"]],policy,function(v){policy=v;})));
   var title=isRen?"Rename":(isCopy?"Copy ":"Move ")+plural(d.top.length,"item");
   openSheet({title:title,content:content,actions:[
     {label:"Cancel"},
@@ -1067,8 +1129,8 @@ function previewCounts(sel,dest,folderPolicy){
   return {nw:nw,ex:ex,ctx:c};
 }
 function chip(t,c){return el("span",{class:"chip"+(c?" "+c:"")},t);}
-function policyWord(p){return {skip:"left as they are",rename:"saved as copies",replace:"replaced"}[p];}
-var FILE_HINT={skip:"Files that already exist are left as they are.",rename:"The new file is saved next to the old one as name_1, name_2 and so on.",replace:"The existing file is overwritten. You can undo this from History."};
+function policyWord(p){return {skip:"will be left as they are",rename:"will be saved as copies",replace:"will be replaced"}[p];}
+var FILE_HINT={skip:"Files that already exist are left as they are.",rename:"The new file is saved in the same folder with _1 added to its name, then _2, _3 and so on.",replace:"The existing file is overwritten. You can undo this from History."};
 var FOLDER_HINT={merge:"New files go into the folder that's already there.",copy:"The incoming folder is saved as Folder_1, Folder_2 and so on, so nothing is mixed."};
 
 /* ================= Add files (sheet) ================= */
@@ -1100,7 +1162,7 @@ function addFilesSheet(list){
   var content=el("div",null,
     el("div",{class:"field",style:"margin-top:0"},el("span",null,"Upload to"),dr),
     el("div",{class:"field"},el("span",null,"Files"),listEl),sumEl,planEl,
-    el("div",{class:"field"},el("span",null,"If a file already exists"),seg([["skip","Skip"],["rename","Keep both"],["replace","Replace"]],policy,function(v){policy=v;paintList();})),
+    el("div",{class:"field"},el("span",null,"If a file already exists"),seg([["skip","Skip"],["rename","Save as copy"],["replace","Replace"]],policy,function(v){policy=v;paintList();})),
     progress,status,logEl);
   paintList();
   var sh=openSheet({title:"Add files",content:content,actions:[
@@ -1237,7 +1299,7 @@ function cleanItemPath(name,strip){
   if(strip&&parts.length>1) parts=parts.slice(1);
   return parts;
 }
-function getLimit(){var v=parseFloat($("optLimit").value);if(!(v>0))v=48;return Math.min(v,99);}
+function getLimit(){var v=parseFloat($("optLimit").value);if(!(v>0))v=49;return Math.min(v,99);}
 function exBuild(){
   var limit=getLimit()*MB, root=mkdir("",""), ignored=0, dupes=0, strip=$("optStrip").checked;
   S.ex.items.forEach(function(r){
@@ -1324,7 +1386,7 @@ function upPreview(){
   var sel=exSelected(); if(!sel.length) return;
   if(S.ex.locked.some(function(l){return l.kind==="zip";})){ box.appendChild(chip("Enter the password above to continue","warn")); return; }
   if(!S.repo.loaded){ box.appendChild(chip("Existing files are checked when you extract")); return; }
-  var pc=previewCounts(sel,S.ex.dest,S.opts.folderPolicy);
+  var pc=previewCounts(sel,S.ex.dest,"merge");
   box.appendChild(chip(pc.nw+" new","add"));
   if(pc.ex) box.appendChild(chip(pc.ex+" already there, "+policyWord(S.opts.filePolicy),"warn"));
   pc.ctx.topMap.forEach(function(v,k){ box.appendChild(chip(k+" saved as "+v)); });
@@ -1336,9 +1398,8 @@ function paintExDest(){
   exDestRow=destRow(holder,"dest",upPreview); box.appendChild(exDestRow);
 }
 function buildSegs(){
-  $("segFile").replaceChildren(seg([["skip","Skip"],["rename","Keep both"],["replace","Replace"]],S.opts.filePolicy,function(v){S.opts.filePolicy=v;savePrefs();$("hintFile").textContent=FILE_HINT[v];upPreview();}));
-  $("segFolder").replaceChildren(seg([["merge","Merge"],["copy","Save as copy"]],S.opts.folderPolicy,function(v){S.opts.folderPolicy=v;savePrefs();$("hintFolder").textContent=FOLDER_HINT[v];upPreview();}));
-  $("hintFile").textContent=FILE_HINT[S.opts.filePolicy]; $("hintFolder").textContent=FOLDER_HINT[S.opts.folderPolicy];
+  $("segFile").replaceChildren(seg([["skip","Skip"],["rename","Save as copy"],["replace","Replace"]],S.opts.filePolicy,function(v){S.opts.filePolicy=v;savePrefs();$("hintFile").textContent=FILE_HINT[v];upPreview();}));
+  $("hintFile").textContent=FILE_HINT[S.opts.filePolicy];
   $("optStrip").checked=!!S.opts.strip; $("optLimit").value=S.opts.limit;
 }
 $("pickArch").onclick=function(){$("inArch").click();};
@@ -1389,7 +1450,7 @@ $("go").onclick=async function(){
   try{
     try{ if("wakeLock" in navigator) wl=await navigator.wakeLock.request("screen"); }catch(e){}
     var ui={status:function(t){$("status").textContent=t;},progress:function(f){$("bar").style.width=Math.round(f*100)+"%";},log:exLog};
-    var R=await sendItems({sel:sel,dest:dest,filePolicy:S.opts.filePolicy,folderPolicy:S.opts.folderPolicy,ui:ui,cancelled:function(){return S.ex.cancel;}});
+    var R=await sendItems({sel:sel,dest:dest,filePolicy:S.opts.filePolicy,folderPolicy:"merge",ui:ui,cancelled:function(){return S.ex.cancel;}});
     $("status").textContent=R.text; exLog(R.text,R.failed.length?"warn":"ok"); toast(R.text,R.failed.length>0);
     if(R.failed.length) exLog("Run it again to retry the files that failed.","warn");
     S.act.loaded=false; loadRepo();
@@ -1591,7 +1652,11 @@ function switchRow(label,checked,onChange,hint){
 }
 $("menuBtn").innerHTML=svg("dots");
 $("menuBtn").addEventListener("click",function(){
+  var tabs=el("div",{class:"menutabs"},TABS.map(function(t){
+    return el("button",{type:"button","aria-current":String(S.tab===t[0]),onclick:function(){closeAllSheets();setTab(t[0]);}},ico(t[2]),t[1]);
+  }));
   var list=el("div",{style:"display:grid;gap:6px"},
+    tabs,
     switchRow("Show app files",!S.opts.hideApp,function(v){S.opts.hideApp=!v;savePrefs();buildIndex();renderLibrary();renderSide();},"The files that make this app run (index.html and the app folder). They show with an app tag. Be careful changing them."),
     switchRow("Keep opened files for offline use",!!S.opts.offline,function(v){S.opts.offline=v;savePrefs();if(!v)clearOffline();},"Saves files you open on this device, unencrypted, so they open without a connection. Turn off on a shared device."),
     el("div",{style:"display:grid;gap:10px;margin-top:8px"},
