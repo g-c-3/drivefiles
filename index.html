@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="author" content="Gokul Chandar">
 <meta name="robots" content="noindex, nofollow">
 <meta name="referrer" content="no-referrer">
 <meta name="theme-color" content="#060914">
@@ -29,6 +30,7 @@
     <label class="field"><span class="sr">Saved</span><select id="homeSel" aria-label="Saved repositories"></select></label>
     <button class="btn primary block" id="homeLogin" type="button">Login</button>
     <button class="linkbtn" id="homeReset" type="button" hidden>Reset this device</button>
+    <p class="credit">Created by Gokul Chandar</p>
   </div>
 </section>
 
@@ -44,8 +46,11 @@
     <label class="field"><span>Access token</span>
       <div class="pw"><input id="cfgToken" type="password" placeholder="Read &amp; Write Access Token" autocomplete="off" autocapitalize="off" spellcheck="false"><button type="button" class="ibtn" id="tokEye" aria-label="Show or hide token"></button></div>
     </label>
-    <label class="field" id="passRow"><span>Passcode<i>optional</i></span><input id="cfgPass" type="password" placeholder="Choose a passcode" autocomplete="new-password" autocapitalize="off" spellcheck="false"></label>
-    <p class="hint" id="passHint">With a passcode, you enter it to log in and the token is encrypted with it. Without one, Login opens the repository straight away, and the token is kept on this device in a form only this browser can open.</p>
+    <label class="field" id="passRow"><span>Passcode</span>
+      <div class="pw"><input id="cfgPass" type="password" placeholder="Choose your own passcode" autocomplete="new-password" autocapitalize="off" spellcheck="false"><button type="button" class="ibtn" id="passEye" aria-label="Show or hide passcode"></button></div>
+    </label>
+    <label class="field" id="pass2Row"><span>Repeat passcode</span><input id="cfgPass2" type="password" placeholder="Type it again" autocomplete="new-password" autocapitalize="off" spellcheck="false"></label>
+    <p class="hint" id="passHint">Required. Use any length, letters, numbers or symbols you like. You enter it each time you log in, and your token is encrypted with it. It can't be recovered if forgotten; you would delete the saved repository and add it again.</p>
     <p class="err" id="setupErr" role="alert"></p>
     <button class="btn primary block" type="submit" id="setupGo">Save</button>
     <button class="btn block" type="button" id="setupOpen" style="margin-top:10px">Save and open</button>
@@ -86,8 +91,9 @@
           </div>
           <p class="page-sub" id="libStat">Loading</p>
           <div class="searchwrap" id="searchWrap" inert>
-            <div><div class="searchbox"><span class="ico" data-ico="search"></span><input id="libSearch" type="text" placeholder="Search files and folders" autocapitalize="off" autocomplete="off" spellcheck="false"></div></div>
+            <div><div class="searchbox"><span class="ico" data-ico="search"></span><input id="libSearch" type="text" placeholder="Search files and folders" enterkeyhint="search" autocapitalize="off" autocomplete="off" spellcheck="false"></div></div>
           </div>
+          <div class="pinstrip" id="pinStrip" hidden></div>
           <div class="pathbar" id="libCrumbs"></div>
           <label class="selall" id="selAllRow"><input type="checkbox" id="selAllBox"> <span>Select all</span></label>
           <div class="list" id="libList"></div>
@@ -179,6 +185,7 @@
     <button id="actRename" type="button"></button>
     <button id="actConvert" type="button" hidden></button>
     <button id="actDel" class="del" type="button"></button>
+    <button id="actMore" type="button" aria-label="More actions"></button>
     <button id="actClear" type="button" aria-label="Clear selection"></button>
   </div>
 </div>
