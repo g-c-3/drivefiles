@@ -1,0 +1,168 @@
+
+<div class="aurora" aria-hidden="true"></div>
+<div id="toasts" aria-live="polite"></div>
+<div id="sheetRoot"></div>
+
+<!-- Home -->
+<section id="s-home" class="auth" hidden>
+  <div class="auth-card home">
+    <div class="mark" data-ico="mark"></div>
+    <h1 class="grad-text">Atlas</h1>
+    <button class="btn block" id="homeAdd" type="button"><span class="ico" data-ico="plus"></span>Add</button>
+    <label class="field"><span class="sr">Saved</span><select id="homeSel" aria-label="Saved repositories"></select></label>
+    <button class="btn primary block" id="homeLogin" type="button">Login</button>
+    <button class="linkbtn" id="homeReset" type="button" hidden>Reset this device</button>
+  </div>
+</section>
+
+<!-- Add / edit -->
+<section id="s-setup" class="auth" hidden>
+  <form class="auth-card" id="setupForm" autocomplete="off">
+    <div class="mark" data-ico="mark"></div>
+    <h1 id="setupTitle">Add a repository</h1>
+    <p class="muted">Your details stay on this device.</p>
+    <label class="field"><span>Account</span><input id="cfgOwner" placeholder="GitHub Account Name" autocapitalize="off" autocomplete="off" spellcheck="false"></label>
+    <label class="field"><span>Repository</span><input id="cfgRepo" placeholder="Repo Name" autocapitalize="off" autocomplete="off" spellcheck="false"></label>
+    <label class="field"><span>Branch<i>optional</i></span><input id="cfgBranch" placeholder="main" value="main" autocapitalize="off" autocomplete="off" spellcheck="false"></label>
+    <label class="field"><span>Access token</span>
+      <div class="pw"><input id="cfgToken" type="password" placeholder="Read &amp; Write Access Token" autocomplete="off" autocapitalize="off" spellcheck="false"><button type="button" class="ibtn" id="tokEye" aria-label="Show or hide token"></button></div>
+    </label>
+    <label class="field" id="passRow"><span>Passcode<i>optional</i></span><input id="cfgPass" type="password" placeholder="Choose a passcode" autocomplete="new-password" autocapitalize="off" spellcheck="false"></label>
+    <p class="hint" id="passHint">With a passcode, you enter it to log in and the token is encrypted with it. Without one, Login opens the repository straight away, and the token is kept on this device in a form only this browser can open.</p>
+    <p class="err" id="setupErr" role="alert"></p>
+    <button class="btn primary block" type="submit" id="setupGo">Save</button>
+    <button class="btn block" type="button" id="setupOpen" style="margin-top:10px">Save and open</button>
+    <button class="btn quiet block" type="button" id="setupCancel">Cancel</button>
+  </form>
+</section>
+
+<!-- App window -->
+<div id="shell" hidden>
+  <div class="window">
+    <header class="titlebar">
+      <div class="brand"><span class="mk" data-ico="mark"></span><span class="grad-text">Atlas</span></div>
+      <button type="button" class="conn" id="connBtn" title="Switch repository" aria-label="Switch repository"><i class="dot" id="connDot"></i><span class="t" id="connName"></span></button>
+      <button class="ibtn" id="menuBtn" aria-label="Menu"></button>
+    </header>
+
+    <div class="wbody">
+      <aside class="sidebar">
+        <nav class="snav" id="sideNav"></nav>
+        <div class="slabel">Folders</div>
+        <div class="stree" id="sideTree"></div>
+        <div class="sstat" id="sideStat"></div>
+      </aside>
+
+      <main class="pane" id="pane">
+        <!-- Files -->
+        <section id="tab-files">
+          <div class="pagehead">
+            <h1 class="page-title">Files</h1>
+            <div class="tools" role="toolbar" aria-label="File actions">
+              <button class="tb" id="searchBtn" type="button" aria-expanded="false" aria-controls="searchWrap"></button>
+              <button class="tb" id="libRefresh" type="button"></button>
+              <button class="tb" id="sortBtn" type="button"></button>
+              <button class="tb" id="newFolder" type="button"></button>
+              <button class="tb" id="newFile" type="button"></button>
+              <button class="tb primary" id="addFiles" type="button"></button>
+            </div>
+          </div>
+          <p class="page-sub" id="libStat">Loading</p>
+          <div class="searchwrap" id="searchWrap" inert>
+            <div><div class="searchbox"><span class="ico" data-ico="search"></span><input id="libSearch" type="text" placeholder="Search files and folders" autocapitalize="off" autocomplete="off" spellcheck="false"></div></div>
+          </div>
+          <div class="pathbar" id="libCrumbs"></div>
+          <label class="selall" id="selAllRow"><input type="checkbox" id="selAllBox"> <span>Select all</span></label>
+          <div class="list" id="libList"></div>
+          <input type="file" id="inFiles" multiple hidden>
+        </section>
+
+        <!-- Extract -->
+        <section id="tab-extract" hidden>
+          <h1 class="page-title">Extract</h1>
+          <p class="page-sub">Open an archive, choose what to keep, and unpack it into a folder.</p>
+          <div id="exLocked"></div>
+          <div class="drop" id="drop">
+            <div class="big" data-ico="archive"></div>
+            <h2>Drop an archive here</h2>
+            <p>ZIP, 7z, RAR, TAR, GZ, BZ2, XZ and more</p>
+            <div class="btns"><button class="btn primary pulse" id="pickArch" type="button">Choose archive</button></div>
+            <input type="file" id="inArch" multiple hidden>
+            <p class="small" id="zipinfo" style="margin:14px 0 0"></p>
+            <button class="btn quiet sm" id="clearUp" type="button" hidden>Clear list</button>
+          </div>
+
+          <div id="upBody" hidden>
+            <section class="sec">
+              <h2>Extract into</h2>
+              <div id="exDest"></div>
+              <div class="field"><span>If a file already exists</span><div id="segFile"></div></div>
+              <p class="hint" id="hintFile"></p>
+              <div id="forceBox" hidden>
+                <label class="check" style="margin-top:8px"><input type="checkbox" id="optForce"> Replace even if the file is identical</label>
+                <p class="hint" id="hintForce" style="margin:0 0 4px 34px"></p>
+              </div>
+              <label class="check" style="margin-top:12px"><input type="checkbox" id="optStrip"> Remove the outer folder from each path</label>
+              <label class="check" style="margin-top:4px"><input type="checkbox" id="optSplit"> Split large PDFs into parts</label>
+              <p class="hint" id="hintSplit" style="margin:0 0 4px 34px"></p>
+              <label class="field" style="margin-top:8px"><span>Hold back files larger than<i>MB</i></span>
+                <input id="optLimit" type="number" min="1" max="99" step="1" value="50" inputmode="numeric">
+              </label>
+              <p class="hint" id="limitHint"></p>
+            </section>
+
+            <section class="sec">
+              <h2>What to extract</h2>
+              <div class="toolbar">
+                <button class="btn sm" id="selAll" type="button">Select all</button>
+                <button class="btn sm" id="selNone" type="button">Clear</button>
+                <button class="btn sm" id="expAll" type="button">Open all</button>
+                <button class="btn sm" id="colAll" type="button">Close all</button>
+              </div>
+              <div class="list scroll" id="tree"></div>
+              <p class="muted small" id="summary" style="margin-top:10px"></p>
+              <div class="chips" id="plan"></div>
+              <details class="more" id="skipbox" hidden open>
+                <summary id="skipsum"></summary>
+                <p class="hint" style="margin:0 0 10px">These were left unselected because of their size. Select any you still want. Very large files need a lot of memory and can fail on a phone, and files of 100 MB or more can't be sent.</p>
+                <div class="list scroll" id="skipped" style="max-height:34vh"></div>
+              </details>
+            </section>
+
+            <section class="sec">
+              <h2>Extract</h2>
+              <div style="display:flex;gap:10px">
+                <button class="btn primary block" id="go" type="button">Extract selected</button>
+                <button class="btn" id="stop" type="button" hidden>Stop</button>
+              </div>
+              <p class="hint">Keep this tab open and the screen on while it runs. Progress is saved in steps, so if it stops, run it again and finished files are skipped.</p>
+              <div class="progress" id="barWrap" hidden><i id="bar"></i></div>
+              <div id="status" class="status small"></div>
+              <details class="more" id="logBox" hidden><summary>Details</summary><div class="log" id="log" aria-live="polite"></div></details>
+            </section>
+          </div>
+        </section>
+
+        <!-- History -->
+        <section id="tab-history" hidden>
+          <h1 class="page-title">History</h1>
+          <p class="page-sub">Every change is saved. Undo the latest one if it wasn't what you meant.</p>
+          <div class="toolbar"><button class="btn sm" id="actRefresh" type="button">Refresh</button></div>
+          <div id="actList"></div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <div class="actionbar" id="actionbar">
+    <span class="cnt" id="selCount"></span>
+    <button id="actDownload" type="button"></button>
+    <button id="actCopy" type="button"></button>
+    <button id="actMove" type="button"></button>
+    <button id="actRename" type="button"></button>
+    <button id="actConvert" type="button" hidden></button>
+    <button id="actDel" class="del" type="button"></button>
+    <button id="actClear" type="button" aria-label="Clear selection"></button>
+  </div>
+</div>
+

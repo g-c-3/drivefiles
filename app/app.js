@@ -43,6 +43,7 @@ var ICONS={
  back:'<path d="m15 5-7 7 7 7"/>',
  upload:'<path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M5 20h14"/>',
  fileplus:'<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M12 12v5M9.5 14.5h5"/>',
+ pin:'<path d="M9 4h6l-1 6 3 3H7l3-3z"/><path d="M12 13v7"/>',
  pencil:'<path d="M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16z"/><path d="m13.5 6.5 4 4"/>'
 };
 function svg(n,sw){return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="'+(sw||1.8)+'" stroke-linecap="round" stroke-linejoin="round">'+ICONS[n]+'</svg>';}
@@ -119,9 +120,9 @@ var S={
   cfg:null, pass:null, pid:null, tab:"files", logSink:null,
   repo:{loaded:false,loading:false,error:null,files:new Map(),dirs:new Set(),index:new Map(),head:null},
   ex:{readers:[],items:[],errors:[],root:null,locked:[],dest:"",destTouched:false,running:false,cancel:false,opening:false},
-  lib:{cwd:"",sel:new Set(),q:"",exp:new Set()},
+  lib:{cwd:"",sel:new Set(),q:"",exp:new Set(),mode:"name",hits:null,busy:0},
   act:{loaded:false,list:[]},
-  opts:{filePolicy:"skip",folderPolicy:"merge",strip:false,limit:50,splitPdf:true,forceSame:false,theme:"dark",sortKey:"name",sortDir:"asc",hideApp:false,offline:false}
+  opts:{filePolicy:"skip",folderPolicy:"merge",strip:false,limit:50,splitPdf:true,forceSame:false,theme:"dark",sortKey:"name",sortDir:"asc",hideApp:false,offline:false,autoLock:2,shrink:false,shrinkMax:2048}
 };
 var VK="a_vault", PK="a_prefs", lastWrite=0, hiddenAt=0;
 
@@ -187,9 +188,10 @@ var PRK="a_profiles";
 var OPT_DEFAULTS=JSON.parse(JSON.stringify(S.opts));
 function b64(u8){var s="",i;for(i=0;i<u8.length;i+=0x8000) s+=String.fromCharCode.apply(null,u8.subarray(i,i+0x8000));return btoa(s);}
 function unb64(s){var bin=atob(s),u=new Uint8Array(bin.length),i;for(i=0;i<bin.length;i++)u[i]=bin.charCodeAt(i);return u;}
-async function deriveKey(pass,salt){
+var ITER_NEW=600000, ITER_OLD=200000;
+async function deriveKey(pass,salt,iters){
   var km=await crypto.subtle.importKey("raw",enc.encode(pass),"PBKDF2",false,["deriveKey"]);
-  return crypto.subtle.deriveKey({name:"PBKDF2",salt:salt,iterations:200000,hash:"SHA-256"},km,{name:"AES-GCM",length:256},false,["encrypt","decrypt"]);
+  return crypto.subtle.deriveKey({name:"PBKDF2",salt:salt,iterations:iters||ITER_OLD,hash:"SHA-256"},km,{name:"AES-GCM",length:256},false,["encrypt","decrypt"]);
 }
 async function sealWith(key,cfg,extra){
   var iv=crypto.getRandomValues(new Uint8Array(12));
@@ -241,20 +243,16 @@ function newId(){return "p"+Date.now().toString(36)+Math.random().toString(36).s
 function findProf(id){for(var i=0;i<PF.list.length;i++) if(PF.list[i].id===id) return PF.list[i]; return null;}
 function profName(p){return p.repo||"Saved repository";}
 async function sealProfile(cfg,pass){
-  var p={repo:cfg.repo,branch:cfg.branch};
-  if(pass&&CAN_CRYPTO){
-    var salt=crypto.getRandomValues(new Uint8Array(16));
-    p.kind="pass"; p.enc=await sealWith(await deriveKey(pass,salt),cfg,{s:b64(salt)});
-  }else if(CAN_CRYPTO){
-    try{ p.kind="device"; p.enc=await sealWith(await deviceKey(true),cfg); }
-    catch(e){ p.kind="plain"; p.cfg=cfg; delete p.enc; }
-  }else{ p.kind="plain"; p.cfg=cfg; }
+  if(!pass) throw new Error("Choose a passcode.");
+  if(!CAN_CRYPTO) throw new Error("This browser can't encrypt here, so Atlas can't keep your token safely. Open the site over https in an up-to-date browser.");
+  var p={repo:cfg.repo,branch:cfg.branch}, salt=crypto.getRandomValues(new Uint8Array(16));
+  p.kind="pass"; p.enc=await sealWith(await deriveKey(pass,salt,ITER_NEW),cfg,{s:b64(salt),n:ITER_NEW});
   return p;
 }
 async function openProfile(p,pass){
   if(p.kind==="plain") return p.cfg;
   if(p.kind==="device"){ var k=await deviceKey(false); if(!k) throw new Error("key missing"); return openWith(k,p.enc); }
-  return openWith(await deriveKey(pass,unb64(p.enc.s)),p.enc);
+  return openWith(await deriveKey(pass,unb64(p.enc.s),p.enc.n||ITER_OLD),p.enc);
 }
 function loadPrefs(){try{Object.assign(S.opts,JSON.parse(localStorage.getItem(PK)||"{}"));}catch(e){} if(S.opts.limit===48||S.opts.limit===49) S.opts.limit=50; S.opts.folderPolicy="merge";}
 function savePrefs(){try{localStorage.setItem(PK,JSON.stringify(S.opts));}catch(e){}}
@@ -303,13 +301,37 @@ async function loginWith(id){
   var p=findProf(id); if(!p) return;
   PF.last=id; writeStore();
   if(p.kind==="pass"){ askPasscode(p); return; }
-  try{ startSession(p,await openProfile(p),null); }
-  catch(e){ toast("Couldn't open "+profName(p)+" on this device. Delete it and add it again.",true); }
+  upgradeSheet(p);
+}
+/* a repository saved by an earlier version without a passcode: ask for one now, then lock it with that */
+function upgradeSheet(p){
+  var a=el("input",{type:"password",placeholder:"Choose your own passcode",autocomplete:"new-password",autocapitalize:"off",spellcheck:"false"});
+  var b=el("input",{type:"password",placeholder:"Type it again",autocomplete:"new-password",autocapitalize:"off",spellcheck:"false"});
+  var eye=el("button",{type:"button",class:"ibtn","aria-label":"Show or hide passcode"}); eye.innerHTML=svg("eye");
+  var row2=el("label",{class:"field"},el("span",null,"Repeat passcode"),b);
+  eye.addEventListener("click",function(){ var show=a.type==="password"; a.type=show?"text":"password"; eye.innerHTML=svg(show?"eyeoff":"eye"); row2.hidden=show; });
+  var content=el("div",null,
+    el("p",null,"Atlas now asks for a passcode on every saved repository. Choose one for "+profName(p)+". Any length and any characters."),
+    el("label",{class:"field"},el("span",null,"Passcode"),el("div",{class:"pw"},a,eye)),row2);
+  var sh=openSheet({title:"Add a passcode",content:content,actions:[
+    {label:"Cancel"},
+    {label:"Save and log in",kind:"primary",fn:async function(){
+      var pass=a.value; if(!pass) throw new Error("Choose a passcode.");
+      if(a.type==="password"&&b.value!==pass) throw new Error("The two passcodes don't match.");
+      var cfg;
+      try{ cfg=await openProfile(p); }catch(e){ throw new Error("Couldn't open "+profName(p)+" on this device. Delete it and add it again."); }
+      var np=await sealProfile(cfg,pass); np.id=p.id; PF.list[PF.list.indexOf(p)]=np; writeStore();
+      startSession(np,cfg,pass);
+    }}]});
+  [a,b].forEach(function(i){i.addEventListener("keydown",function(e){ if(e.key==="Enter"){e.preventDefault();sh.btns[1].click();} });});
+  setTimeout(function(){a.focus();},320);
 }
 function askPasscode(p){
-  var inp=el("input",{type:"password",placeholder:"Passcode",autocomplete:"off",autocapitalize:"off",spellcheck:"false"});
+  var inp=el("input",{type:"password",placeholder:"Passcode",autocomplete:"current-password",autocapitalize:"off",spellcheck:"false"});
+  var eye=el("button",{type:"button",class:"ibtn","aria-label":"Show or hide passcode"}); eye.innerHTML=svg("eye");
+  eye.addEventListener("click",function(){ var show=inp.type==="password"; inp.type=show?"text":"password"; eye.innerHTML=svg(show?"eyeoff":"eye"); inp.focus(); });
   var content=el("div",null,
-    el("label",{class:"field",style:"margin-top:0"},el("span",null,"Passcode"),inp),
+    el("label",{class:"field",style:"margin-top:0"},el("span",null,"Passcode"),el("div",{class:"pw"},inp,eye)),
     el("button",{type:"button",class:"linkbtn",onclick:function(){deleteSheet([p.id]);}},"Forgot the passcode? Delete this saved repository"));
   var sh=openSheet({title:"Log in to "+profName(p),content:content,actions:[
     {label:"Cancel"},
@@ -354,6 +376,7 @@ function deleteSheet(ids){
       var gone=new Set(ids), hadCurrent=S.pid&&gone.has(S.pid);
       PF.list=PF.list.filter(function(p){return !gone.has(p.id);});
       if(gone.has(PF.last)) PF.last=PF.list.length?PF.list[0].id:null;
+      ids.forEach(function(i){try{localStorage.removeItem("a_pins_"+i);}catch(e){}});
       writeStore(); a.close(); closeAllSheets();
       toast("Deleted "+(ps.length===1?profName(ps[0]):ps.length+" saved repositories"));
       if(hadCurrent) lockNow(); else if(!S.cfg) showHome();
@@ -385,15 +408,19 @@ function showSetup(editId){
   var c=editId?(S.cfg||{}):{}, parts=(c.repo||"").split("/");
   $("setupTitle").textContent=editId?"Edit details":"Add a repository";
   $("cfgOwner").value=parts[0]||""; $("cfgRepo").value=parts[1]||""; $("cfgBranch").value=c.branch||"main"; $("cfgToken").value=c.token||"";
-  $("cfgPass").value=editId?(S.pass||""):""; $("cfgToken").type="password"; $("tokEye").innerHTML=svg("eye");
+  $("cfgPass").value=editId?(S.pass||""):""; $("cfgPass2").value=""; $("cfgPass").type="password"; $("passEye").innerHTML=svg("eye"); $("pass2Row").hidden=false;
+  $("cfgToken").type="password"; $("tokEye").innerHTML=svg("eye");
   $("setupErr").textContent="";
   $("setupGo").textContent=editId?"Save changes":"Save"; $("setupOpen").hidden=!!editId;
-  $("passRow").hidden=$("passHint").hidden=!CAN_CRYPTO;
   showScreen("s-setup");
 }
 $("tokEye").innerHTML=svg("eye");
 $("tokEye").addEventListener("click",function(){
   var f=$("cfgToken"), show=f.type==="password"; f.type=show?"text":"password"; $("tokEye").innerHTML=svg(show?"eyeoff":"eye");
+});
+$("passEye").innerHTML=svg("eye");
+$("passEye").addEventListener("click",function(){
+  var f=$("cfgPass"), show=f.type==="password"; f.type=show?"text":"password"; $("passEye").innerHTML=svg(show?"eyeoff":"eye"); $("pass2Row").hidden=show;
 });
 $("setupCancel").addEventListener("click",function(){ if(editingId&&S.cfg) showScreen("shell"); else showHome(); });
 async function verifyRepo(cfg){
@@ -415,6 +442,9 @@ async function saveSetup(openAfter){
   if(!/^[\w.-]+$/.test(owner)){ $("setupErr").textContent="Enter your GitHub account name."; return; }
   if(!/^[\w.-]+$/.test(name)){ $("setupErr").textContent="Enter the repository name."; return; }
   if(!token){ $("setupErr").textContent="Enter your access token."; return; }
+  if(!pass){ $("setupErr").textContent="Choose a passcode. It's required, and you pick what it is."; return; }
+  var unchanged=editingId&&S.pass&&pass===S.pass;
+  if($("cfgPass").type==="password"&&!unchanged&&$("cfgPass2").value!==pass){ $("setupErr").textContent="The two passcodes don't match."; return; }
   var btns=[$("setupGo"),$("setupOpen"),$("setupCancel")]; btns.forEach(function(b){b.disabled=true;});
   $("setupErr").textContent="";
   try{
@@ -425,14 +455,145 @@ async function saveSetup(openAfter){
     if(!old) for(i=0;i<PF.list.length;i++){ var q=PF.list[i]; if(profName(q).toLowerCase()===cfg.repo.toLowerCase()&&q.branch===cfg.branch){old=q;break;} }
     if(old){ p.id=old.id; PF.list[PF.list.indexOf(old)]=p; } else { p.id=newId(); PF.list.push(p); }
     PF.last=p.id; writeStore();
-    if(editingId){ S.cfg=cfg; S.pass=(p.kind==="pass")?pass:null; S.pid=p.id; resetRepo(); enterApp(); toast("Saved"); }
-    else if(openAfter) startSession(p,cfg,p.kind==="pass"?pass:null);
+    if(editingId){ S.cfg=cfg; S.pass=pass; S.pid=p.id; resetRepo(); enterApp(); toast("Saved"); }
+    else if(openAfter) startSession(p,cfg,pass);
     else { showHome(); toast("Saved "+cfg.repo); }
   }catch(err){ $("setupErr").textContent=(err&&err.message)||String(err); }
   btns.forEach(function(b){b.disabled=false;});
 }
 $("setupForm").addEventListener("submit",function(e){e.preventDefault();saveSetup(false);});
 $("setupOpen").addEventListener("click",function(){saveSetup(true);});
+
+/* ----- branches ----- */
+async function useBranch(name){
+  var p=curProfile(); S.cfg.branch=name;
+  if(p&&S.pass){ try{ var np=await sealProfile(S.cfg,S.pass); np.id=p.id; PF.list[PF.list.indexOf(p)]=np; writeStore(); }catch(e){} }
+  resetRepo(); S.lib.sel.clear(); S.lib.cwd=""; S.lib.q=""; $("libSearch").value=""; enterApp();
+}
+async function branchSheet(){
+  var cur=S.cfg.branch, box=el("div",null,el("p",{class:"muted"},"Loading branches…"));
+  var sh=openSheet({title:"Branches",content:box,actions:[{label:"Close"}]});
+  var names;
+  try{ names=(await gh("GET",api()+"/branches?per_page=100")).map(function(b){return b.name;}); }
+  catch(e){ box.replaceChildren(el("p",{class:"err"},friendly(e))); return; }
+  if(names.indexOf(cur)<0) names.unshift(cur);
+  var err=el("p",{class:"err",role:"alert"}), st=el("div",{class:"status small"});
+  var list=el("div",{class:"list scroll",style:"max-height:32vh"});
+  names.forEach(function(n){
+    list.appendChild(el("div",{class:"row nav"+(n===cur?" sel":""),role:"button",tabindex:"0",onclick:async function(){
+      if(n===cur){closeAllSheets();return;} closeAllSheets(); await useBranch(n); toast("Now on "+n);
+    }},el("span",{class:"tile"},ico("sort")),el("div",{class:"name"},n),n===cur?el("span",{class:"tag"},"open"):el("span",{class:"muted"},ico("chev"))));
+  });
+  var nin=el("input",{placeholder:"New branch name",autocapitalize:"off",autocomplete:"off",spellcheck:"false"});
+  var cbtn=el("button",{class:"btn",type:"button",onclick:async function(){
+    var n=nin.value.trim(); err.textContent="";
+    if(!n||/[\s~^:?*\[\\]|\.\.|\/\/|\.lock$|^[\/.-]|[\/.]$/.test(n)){ err.textContent="Use letters, numbers, - _ . or / in the name, with no spaces."; return; }
+    if(names.indexOf(n)>=0){ err.textContent="That branch already exists."; return; }
+    cbtn.disabled=true;
+    try{
+      var head=(await gh("GET",api()+"/git/ref/heads/"+bp())).object.sha;
+      await gh("POST",api()+"/git/refs",{ref:"refs/heads/"+n,sha:head},"fast");
+      closeAllSheets(); await useBranch(n); toast("Created "+n+" and switched to it");
+    }catch(e){ err.textContent=friendly(e); cbtn.disabled=false; }
+  }},"Create");
+  var others=names.filter(function(n){return n!==cur;}), target=others[0]||"";
+  var tsel=el("select",{"aria-label":"Merge into"},others.map(function(n){return el("option",{value:n},n);}));
+  var mbtn=el("button",{class:"btn",type:"button",onclick:async function(){
+    err.textContent=""; st.textContent=""; if(!tsel.value) return; mbtn.disabled=true;
+    try{
+      var r=await gh("POST",api()+"/merges",{base:tsel.value,head:cur,commit_message:"Merge "+cur+" into "+tsel.value},"fast");
+      st.textContent=r?"Merged "+cur+" into "+tsel.value+".":cur+" has nothing new for "+tsel.value+".";
+      toast(st.textContent);
+    }catch(e){
+      err.textContent=e.status===409?"These branches have changes that overlap, so GitHub couldn't merge them automatically. Resolve it on github.com.":friendly(e);
+    }
+    mbtn.disabled=false;
+  }},"Merge");
+  box.replaceChildren(
+    el("div",{class:"field",style:"margin-top:0"},el("span",null,"Switch to"),list),
+    el("div",{class:"field"},el("span",null,"New branch from "+cur),el("div",{class:"destrow"},nin,cbtn)),
+    others.length?el("div",{class:"field"},el("span",null,"Merge "+cur+" into"),el("div",{class:"destrow"},tsel,mbtn)):null,
+    el("p",{class:"hint"},"Switching changes which branch Atlas shows and saves to. Merging uses GitHub's own merge, and if the changes overlap it tells you instead of guessing. Every change stays in History."),
+    st,err);
+}
+function backupSheet(){
+  if(!S.repo.loaded){ toast("Wait for the files to load first.",true); return; }
+  var paths=[]; S.repo.files.forEach(function(f,p){paths.push(p);});
+  if(!paths.length){ toast("There are no files to back up.",true); return; }
+  zipDownloadSheet({top:[]},paths,{full:true,title:"Back up the whole repository",name:S.cfg.repo.replace("/","-")+"-"+S.cfg.branch.replace(/[\/]/g,"-")+"-backup"});
+}
+
+/* ----- PDF tools: join, extract pages, rotate ----- */
+function freeName(path){
+  if(!S.repo.files.has(path)) return path;
+  var i=path.lastIndexOf("."), stem=path.slice(0,i), ext=path.slice(i), n=2; while(S.repo.files.has(stem+" ("+n+")"+ext)) n++; return stem+" ("+n+")"+ext;
+}
+async function savePdfResult(path,blob,msg){
+  if(blob.size>MAX_BYTES) throw new Error("The result is "+fmt(blob.size)+", which is over the "+fmt(MAX_BYTES)+" GitHub allows for one file.");
+  var res=await gh("POST",api()+"/git/blobs",{content:await toBase64(blob),encoding:"base64"},true);
+  var old=S.repo.files.get(path);
+  await commitEntries([{path:path,mode:old?old.mode:"100644",type:"blob",sha:res.sha}],msg);
+}
+async function pdfToolSheet(kind,paths){
+  try{ await loadScript("app/vendor/pdflib.js"); await loadScript("app/pdftools.js"); }catch(e){ toast(e.message,true); return; }
+  var T=window.AtlasPdf, first=paths[0], dir=first.indexOf("/")>=0?first.slice(0,first.lastIndexOf("/")+1):"", stem=basename(first).replace(/\.pdf$/i,"");
+  var title={join:"Join PDFs",extract:"Extract pages",rotate:"Rotate pages"}[kind];
+  var holder={dest:dir.replace(/\/$/,"")}, nameIn=el("input",{autocapitalize:"off",autocomplete:"off",spellcheck:"false"});
+  nameIn.value=kind==="join"?stem+" joined.pdf":(kind==="extract"?stem+" extract.pdf":stem+" rotated.pdf");
+  var pagesIn=el("input",{placeholder:kind==="rotate"?"All pages":"For example 1-3, 5",autocapitalize:"off",autocomplete:"off",spellcheck:"false",inputmode:"text"});
+  var deg=90, mode="new", status=el("div",{class:"status small"}), bar=el("i"), progress=el("div",{class:"progress",hidden:true},bar);
+  var info=el("p",{class:"muted small"});
+  var body=[];
+  if(kind==="join"){
+    info.textContent=plural(paths.length,"PDF")+" will be joined in this order:";
+    body.push(info,el("ul",{class:"sumlist"},paths.map(function(p){return el("li",null,fileTile(p),el("span",null,p));})));
+  }else{
+    info.textContent=paths.length>1?plural(paths.length,"PDF")+" selected. The first is used: "+first:first;
+    if(kind==="extract") paths=[first];
+    body.push(info);
+    blobBySha(S.repo.files.get(first).sha).then(T.pageCount).then(function(n){info.textContent=first+" has "+plural(n,"page")+".";}).catch(function(){});
+    body.push(el("label",{class:"field"},el("span",null,kind==="rotate"?"Pages (optional)":"Pages to keep"),pagesIn));
+  }
+  if(kind==="rotate"){
+    body.push(el("div",{class:"field"},el("span",null,"Turn clockwise"),seg([["90","90°"],["180","180°"],["270","270°"]],"90",function(v){deg=+v;})));
+    body.push(el("div",{class:"field"},el("span",null,"Save as"),seg([["new","New file"],["replace","Replace original"]],"new",function(v){mode=v;nameRow.hidden=(v==="replace");})));
+  }
+  var nameRow=el("label",{class:"field"},el("span",null,"New file name"),nameIn);
+  body.push(nameRow);
+  if(kind!=="rotate"||paths.length===1) body.push(el("div",{class:"field"},el("span",null,"Save in"),destRow(holder,"dest")));
+  body.push(el("p",{class:"hint"},"The result is saved in your repository as a new commit, so you can undo it from History. Text and pictures are kept; bookmarks and form fields may not be."),progress,status);
+  var content=el("div",null,body);
+  openSheet({title:title,content:content,actions:[
+    {label:"Cancel"},
+    {label:kind==="join"?"Join and save":(kind==="extract"?"Extract and save":"Rotate and save"),kind:"primary",fn:async function(a){
+      a.lock(true); progress.hidden=false; progress.classList.add("run");
+      try{
+        var outDir=holder.dest?holder.dest+"/":"", nm=nameIn.value.trim().replace(/[\\/:*?"<>|]+/g,"_");
+        if(kind!=="rotate"||mode==="new"){ if(!nm) throw new Error("Enter a file name."); if(!/\.pdf$/i.test(nm)) nm+=".pdf"; }
+        if(kind==="join"){
+          var bl=[]; for(var i=0;i<paths.length;i++){ status.textContent="Downloading "+(i+1)+" of "+paths.length; bl.push(await blobBySha(S.repo.files.get(paths[i]).sha)); }
+          var out=await T.merge(bl,function(t){status.textContent=t;}), dest=freeName(outDir+nm);
+          status.textContent="Saving"; await savePdfResult(dest,out,"Join "+paths.length+" PDFs into "+basename(dest));
+          toast("Saved "+basename(dest));
+        }else if(kind==="extract"){
+          var src=await blobBySha(S.repo.files.get(first).sha), n=await T.pageCount(src), idx=T.parseRanges(pagesIn.value,n);
+          status.textContent="Building the new PDF"; var o2=await T.extract(src,idx), d2=freeName(outDir+nm);
+          status.textContent="Saving"; await savePdfResult(d2,o2,"Extract "+plural(idx.length,"page")+" from "+basename(first));
+          toast("Saved "+basename(d2));
+        }else{
+          for(var j=0;j<paths.length;j++){
+            status.textContent="Rotating "+(j+1)+" of "+paths.length;
+            var sb=await blobBySha(S.repo.files.get(paths[j]).sha), cnt=await T.pageCount(sb), ix=pagesIn.value.trim()?T.parseRanges(pagesIn.value,cnt):Array.from({length:cnt},function(_,k){return k;});
+            var ro=await T.rotate(sb,ix,deg), tgt;
+            if(mode==="replace") tgt=paths[j]; else tgt=freeName(paths.length===1?outDir+nm:(paths[j].replace(/\.pdf$/i,"")+" rotated.pdf"));
+            await savePdfResult(tgt,ro,"Rotate "+plural(ix.length,"page")+" in "+basename(paths[j]));
+          }
+          toast("Rotated and saved");
+        }
+        a.lock(false); a.close(); S.act.loaded=false; await loadRepo();
+      }catch(e){ progress.classList.remove("run"); a.lock(false); throw new Error(friendly(e)); }
+    }}]});
+}
 
 /* ----- switch and manage, from inside the app ----- */
 function switchSheet(){
@@ -441,7 +602,7 @@ function switchSheet(){
     var cur=p.id===S.pid;
     list.appendChild(el("div",{class:"row nav"+(cur?" sel":""),role:"button",tabindex:"0",onclick:function(){
       if(cur){closeAllSheets();return;} closeAllSheets(); loginWith(p.id);
-    }},el("span",{class:"tile"},ico("lock")),el("div",{class:"name"},profName(p),el("small",null,(p.branch||"main")+(p.kind==="pass"?"  ·  passcode":""))),cur?el("span",{class:"tag"},"open"):el("span",{class:"muted"},ico("chev"))));
+    }},el("span",{class:"tile"},ico("lock")),el("div",{class:"name"},profName(p),el("small",null,(p.branch||"main")+(p.kind==="pass"?"  ·  passcode":"  ·  needs a passcode"))),cur?el("span",{class:"tag"},"open"):el("span",{class:"muted"},ico("chev"))));
   });
   list.appendChild(el("div",{class:"row nav",role:"button",tabindex:"0",onclick:function(){closeAllSheets();showSetup(null);}},
     el("span",{class:"tile"},ico("plus")),el("div",{class:"name"},"Add another repository"),el("span",{class:"muted"},ico("chev"))));
@@ -455,7 +616,7 @@ function manageSheet(){
       var cb=el("input",{type:"checkbox",checked:sel.has(p.id),"aria-label":"Select "+profName(p),onchange:function(){ if(cb.checked) sel.add(p.id); else sel.delete(p.id); paint(); }});
       var cur=p.id===S.pid;
       var row=el("div",{class:"row"+(sel.has(p.id)?" sel":"")},cb,el("span",{class:"tile"},ico("lock")),
-        el("div",{class:"name"},profName(p),cur?el("span",{class:"tag"},"open now"):null,el("small",null,(p.branch||"main")+"  ·  "+(p.kind==="pass"?"passcode":(p.kind==="device"?"no passcode":"no passcode, not encrypted")))));
+        el("div",{class:"name"},profName(p),cur?el("span",{class:"tag"},"open now"):null,el("small",null,(p.branch||"main")+"  ·  "+(p.kind==="pass"?"passcode":"needs a passcode"))));
       row.addEventListener("click",function(e){ if(e.target===cb) return; if(sel.has(p.id)) sel.delete(p.id); else sel.add(p.id); paint(); });
       list.appendChild(row);
     });
@@ -469,11 +630,19 @@ function manageSheet(){
 }
 $("connBtn").addEventListener("click",switchSheet);
 
+/* auto-lock: after the chosen minutes away from the screen or without any touch or key press (0 means never) */
+var lastAct=Date.now();
+function lockMs(){var m=+S.opts.autoLock; return m>0?m*60000:0;}
+function busyJob(){return S.ex.running||uploadBusy;}
+function bump(){lastAct=Date.now();}
+["pointerdown","keydown","touchstart","wheel","scroll"].forEach(function(t){window.addEventListener(t,bump,{passive:true,capture:true});});
 document.addEventListener("visibilitychange",function(){
   if(document.hidden){ hiddenAt=Date.now(); return; }
-  var p=curProfile();
-  if(S.cfg&&p&&p.kind==="pass"&&!S.ex.running&&!uploadBusy&&hiddenAt&&Date.now()-hiddenAt>120000) lockNow();
+  var ms=lockMs();
+  if(S.cfg&&ms&&!busyJob()&&hiddenAt&&Date.now()-hiddenAt>ms) lockNow();
+  bump();
 });
+setInterval(function(){ var ms=lockMs(); if(S.cfg&&ms&&!busyJob()&&Date.now()-lastAct>ms){ lockNow(); toast("Locked after "+(+S.opts.autoLock)+" min of no activity"); } },5000);
 
 /* ================= sheets (stackable) ================= */
 var sheetStack=[];
@@ -653,6 +822,19 @@ function enterApp(){
   S.lib.sel.clear(); S.lib.cwd=""; S.lib.q=""; $("libSearch").value=""; $("searchWrap").classList.remove("open"); $("searchWrap").inert=true; $("searchBtn").classList.remove("on"); S.ex.destTouched=false; S.ex.dest="";
   $("connName").textContent=S.cfg.repo; $("connDot").classList.remove("off"); fitConn();
   Nav.dropKind("view"); setTabRaw("files"); loadRepo();
+  if(shareWaiting){ shareWaiting=false; takeShared(); }
+}
+/* files shared to Atlas from another Android app (installed app only): the service worker parks them until you log in */
+var shareWaiting=/[?&]share=1\b/.test(location.search);
+if(shareWaiting){ try{history.replaceState(history.state,"",location.pathname);}catch(e){} }
+async function takeShared(){
+  try{
+    if(!window.caches) return;
+    var c=await caches.open("atlas-share"), ks=await c.keys(), files=[], i, r, b;
+    for(i=0;i<ks.length;i++){ r=await c.match(ks[i]); b=await r.blob(); files.push(new File([b],decodeURIComponent(r.headers.get("x-name")||"shared file"),{type:b.type})); }
+    for(i=0;i<ks.length;i++) await c.delete(ks[i]);
+    if(files.length){ setTab("files"); addFilesSheet(files); }
+  }catch(e){}
 }
 
 /* ================= folder helpers ================= */
@@ -702,6 +884,9 @@ function topSelected(){var s=S.lib.sel;return Array.from(s).filter(function(p){r
 function dirEntry(path){var i=path.lastIndexOf("/"),parent=i>=0?path.slice(0,i):"",m=S.repo.index.get(parent);return m?m.get(basename(path)):null;}
 function visibleRows(){
   var r=S.repo, q=S.lib.q.trim().toLowerCase(), rows=[];
+  if(q&&S.lib.mode==="text"){
+    return (S.lib.hits||[]).filter(function(h){return r.files.has(h.path);}).map(function(h){return {dir:false,path:h.path,size:h.size,snip:h.snip,n:h.n};});
+  }
   if(q){
     r.dirs.forEach(function(d){ if(d.toLowerCase().indexOf(q)>=0){var e=dirEntry(d)||{count:0,size:0}; rows.push({dir:true,path:d,count:e.count,size:e.size});} });
     r.files.forEach(function(f,p){ if(!isKeep(p)&&(!S.opts.hideApp||!isApp(p))&&p.toLowerCase().indexOf(q)>=0) rows.push({dir:false,path:p,size:f.size}); });
@@ -726,7 +911,7 @@ function renderLibrary(){
   $("libStat").textContent=plural(countVisibleFiles(),"file")+", "+fmt(total)+(r.truncated?" (list is partial)":"");
   var q=S.lib.q.trim();
   if(q){
-    $("libCrumbs").appendChild(el("span",{class:"muted small",style:"padding:7px 9px"},"Results for “"+q+"”"));
+    $("libCrumbs").appendChild(el("span",{class:"muted small",style:"padding:7px 9px"},S.lib.mode==="text"?(S.lib.busy?"Searching inside files…":(S.lib.hits?plural(S.lib.hits.length,"file")+" contain “"+q+"”":"Press Enter to search inside files")):"Results for “"+q+"”"));
   }else{
     var parts=S.lib.cwd?S.lib.cwd.split("/"):[], acc="";
     $("libCrumbs").appendChild(el("button",{type:"button",onclick:function(){goDir("");},"aria-label":"All files"},ico("home")));
@@ -739,7 +924,7 @@ function renderLibrary(){
   var rows=visibleRows();
   $("addFiles").classList.toggle("pulse",!rows.length&&!q);
   if(!rows.length){
-    list.appendChild(el("div",{class:"empty"},el("b",null,q?"Nothing matches":(r.files.size?"This folder is empty":"No files yet")),q?"Try a different search.":"Add files to get started."));
+    list.appendChild(el("div",{class:"empty"},el("b",null,q?(S.lib.mode==="text"&&!S.lib.hits?"Search inside files":"Nothing matches"):(r.files.size?"This folder is empty":"No files yet")),q?(S.lib.mode==="text"&&!S.lib.hits?"Type what to look for, then press Enter. Text files up to 1 MB are checked.":"Try a different search."):"Add files to get started."));
     updateActionbar(); return;
   }
   $("selAllRow").hidden=false;
@@ -754,7 +939,7 @@ function renderLibrary(){
     var where=q&&basename(x.path)!==x.path?x.path.slice(0,x.path.length-basename(x.path).length-1)+"  ·  "+sub:sub;
     var row=el("div",{class:"row"+(x.dir?" nav":"")+(on?" sel":"")},cb,
       x.dir?folderTile(basename(x.path)):fileTile(basename(x.path)),
-      el("div",{class:"name"},shown,isAppPath(x.path)?el("span",{class:"tag app",title:"Part of this app"},"app"):null,el("small",null,where)),
+      el("div",{class:"name"},shown,isAppPath(x.path)?el("span",{class:"tag app",title:"Part of this app"},"app"):null,el("small",null,where),x.snip?el("small",{class:"snip"},x.snip):null),
       x.dir?el("span",{class:"muted"},ico("chev")):null);
     row.addEventListener("click",function(e){
       if(e.target===cb) return;
@@ -767,11 +952,49 @@ function renderLibrary(){
   });
   updateActionbar();
 }
+/* pinned folders and files, and recently opened files: kept on this device only, per saved repository */
+function pinKey(){return "a_pins_"+(S.pid||"");}
+function readPins(){ try{var o=JSON.parse(localStorage.getItem(pinKey())); if(o&&Array.isArray(o.pins)) return {pins:o.pins,recent:Array.isArray(o.recent)?o.recent:[]};}catch(e){} return {pins:[],recent:[]}; }
+function writePins(o){ try{localStorage.setItem(pinKey(),JSON.stringify(o));}catch(e){} }
+function pathExists(p){return S.repo.files.has(p)||S.repo.dirs.has(p);}
+function noteRecent(path){ if(!S.pid) return; var o=readPins(); o.recent=[path].concat(o.recent.filter(function(x){return x!==path;})).slice(0,8); writePins(o); if(S.repo.loaded) renderPins(); }
+function togglePin(paths){
+  var o=readPins(), allPinned=paths.every(function(p){return o.pins.indexOf(p)>=0;});
+  if(allPinned) o.pins=o.pins.filter(function(p){return paths.indexOf(p)<0;});
+  else paths.forEach(function(p){ if(o.pins.indexOf(p)<0) o.pins.push(p); });
+  writePins(o); toast(allPinned?"Unpinned":"Pinned"); renderLibrary();
+}
+function renderPins(){
+  var box=$("pinStrip"), o=readPins(), q=S.lib.q.trim();
+  box.replaceChildren();
+  var pins=o.pins.filter(pathExists), rec=o.recent.filter(function(p){return S.repo.files.has(p)&&pins.indexOf(p)<0;}).slice(0,5);
+  if(q||(!pins.length&&!rec.length)||!S.repo.loaded){ box.hidden=true; return; }
+  box.hidden=false;
+  function chipFor(p,icon){
+    var isDir=S.repo.dirs.has(p)&&!S.repo.files.has(p);
+    return el("button",{type:"button",class:"pinchip",title:p,onclick:function(){ if(isDir){goDir(p);window.scrollTo(0,0);}else openFile(p); }},ico(icon),el("span",null,basename(p)));
+  }
+  pins.forEach(function(p){box.appendChild(chipFor(p,"pin"));});
+  rec.forEach(function(p){box.appendChild(chipFor(p,"clock"));});
+}
+function moreSheet(){
+  var tops=topSelected(), isPdf=function(p){return extOf(p)==="pdf"&&S.repo.files.has(p);}, pdfs=tops.filter(isPdf), o=readPins();
+  var allPinned=tops.length&&tops.every(function(p){return o.pins.indexOf(p)>=0;});
+  var list=el("div",{class:"list"});
+  function row(icon,title,sub,fn){ list.appendChild(el("div",{class:"row nav",role:"button",tabindex:"0",onclick:function(){closeAllSheets();fn();}},el("span",{class:"tile"},ico(icon)),el("div",{class:"name"},title,el("small",null,sub)),el("span",{class:"muted"},ico("chev")))); }
+  row("pin",allPinned?"Unpin from the top":"Pin to the top","Keeps it one tap away above the file list",function(){togglePin(tops);});
+  if(pdfs.length>=2) row("copy","Join PDFs","Combine "+pdfs.length+" PDFs, in the order shown, into one new file",function(){pdfToolSheet("join",pdfs);});
+  if(pdfs.length===1) row("files","Extract pages","Save chosen pages as a new PDF",function(){pdfToolSheet("extract",pdfs);});
+  if(pdfs.length>=1) row("refresh","Rotate pages","Turn every page, or chosen pages, 90°, 180° or 270°",function(){pdfToolSheet("rotate",pdfs);});
+  openSheet({title:"More",content:list,actions:[{label:"Close"}]});
+}
+$("actMore").append(ico("dots"),lbl("More"));
+$("actMore").onclick=moreSheet;
 function updateActionbar(){
   var n=S.lib.sel.size, bar=$("actionbar");
   bar.classList.toggle("show",n>0&&S.tab==="files");
   $("selCount").textContent=n+" selected";
-  $("actRename").hidden=n!==1; $("actConvert").hidden=!hasLegacy();
+  $("actRename").hidden=n!==1; $("actConvert").hidden=!hasLegacy(); if(S.repo.loaded) renderPins();
 }
 function lbl(t){return el("span",{class:"lbl"},t);}
 $("actDownload").append(ico("download"),lbl("Download"));
@@ -785,7 +1008,44 @@ $("addFiles").append(ico("upload"));
 $("actClear").onclick=function(){S.lib.sel.clear();renderLibrary();};
 $("libRefresh").innerHTML=svg("refresh");
 $("libRefresh").onclick=function(){loadRepo();};
-$("libSearch").addEventListener("input",function(e){S.lib.q=e.target.value;renderLibrary();});
+$("libSearch").addEventListener("input",function(e){S.lib.q=e.target.value;S.lib.hits=null;searchTok++;S.lib.busy=0;renderLibrary();});
+var TEXT_EXT=new Set("txt md markdown csv tsv json xml html htm css js mjs cjs ts tsx jsx py java c h cpp hpp cs go rs rb php sh bat ps1 yml yaml toml ini cfg conf log sql tex rst svg srt vtt r kt swift lua gitignore env tcl pl dart vue scss less".split(" "));
+var searchTok=0;
+async function searchInside(){
+  var q=S.lib.q.trim(); if(q.length<2){ toast("Type at least 2 letters.",true); return; }
+  var tok=++searchTok, ql=q.toLowerCase(), files=[], total=0, partial=false;
+  S.repo.files.forEach(function(f,p){ if(isKeep(p)||(S.opts.hideApp&&isApp(p))) return; if(!TEXT_EXT.has(extOf(p))||f.size>MB||!f.size) return; if(files.length>=1500||total+f.size>120*MB){partial=true;return;} files.push({p:p,sha:f.sha,size:f.size}); total+=f.size; });
+  S.lib.hits=[]; S.lib.busy=tok; renderLibrary();
+  var next=0, done=0;
+  async function worker(){
+    while(next<files.length&&tok===searchTok){
+      var f=files[next++];
+      try{
+        var t=await (await blobBySha(f.sha)).text(), lt=t.toLowerCase(), i=lt.indexOf(ql);
+        if(i>=0){
+          var n=0,j=i; while(j>=0&&n<99){n++;j=lt.indexOf(ql,j+ql.length);}
+          var a=t.lastIndexOf("\n",i)+1, b=t.indexOf("\n",i); if(b<0) b=t.length;
+          var line=t.slice(a,b).trim(), k=i-a; if(line.length>140){ var st=Math.max(0,k-50); line=(st?"…":"")+line.slice(st,st+130)+"…"; }
+          S.lib.hits.push({path:f.p,size:f.size,snip:line+(n>1?"   ("+n+(n>=99?"+":"")+" matches)":""),n:n});
+        }
+      }catch(e){}
+      done++; if(done%25===0&&tok===searchTok){ $("libStat").textContent="Searching "+done+" of "+files.length; }
+    }
+  }
+  var ws=[]; for(var w=0;w<6;w++) ws.push(worker());
+  await Promise.all(ws);
+  if(tok!==searchTok) return;
+  S.lib.hits.sort(function(a,b){return a.path.localeCompare(b.path);}); S.lib.busy=0; renderLibrary();
+  if(partial) toast("Only the first part of a very large repository was searched.");
+}
+$("libSearch").addEventListener("keydown",function(e){ if(e.key==="Enter"&&S.lib.mode==="text"){e.preventDefault();searchInside();} });
+(function(){
+  var host=$("searchWrap").firstElementChild;
+  host.appendChild(el("div",{style:"margin:2px 0 6px"},seg([["name","Names"],["text","Inside files"]],"name",function(v){
+    S.lib.mode=v; S.lib.hits=null; searchTok++; S.lib.busy=0;
+    $("libSearch").placeholder=v==="text"?"Search inside text files, then press Enter":"Search files and folders"; renderLibrary();
+  })));
+})();
 $("selAllBox").addEventListener("change",function(){
   var rows=visibleRows();
   if($("selAllBox").checked) rows.forEach(function(x){S.lib.sel.add(x.path);});
@@ -963,8 +1223,9 @@ $("newFolder").onclick=function(){
 };
 
 /* ----- download ----- */
+var zipFull=false;
 function entryName(p){
-  var base=S.lib.q.trim()?"":S.lib.cwd;
+  var base=(zipFull||S.lib.q.trim())?"":S.lib.cwd;
   return base&&p.indexOf(base+"/")===0?p.slice(base.length+1):p;
 }
 $("actDownload").onclick=async function(){
@@ -979,7 +1240,8 @@ $("actDownload").onclick=async function(){
   }
   zipDownloadSheet(d,paths);
 };
-async function zipDownloadSheet(d,paths){
+async function zipDownloadSheet(d,paths,zo){
+  zipFull=!!(zo&&zo.full);
   if(paths.some(function(p){return / pages\d+to\d+\.pdf$/i.test(p);})){ try{ await loadScript("app/pdftools.js"); }catch(e){} }
   var mplan=window.AtlasPdf?window.AtlasPdf.planMerge(paths):{groups:[],rest:paths};
   var restNames=new Set(mplan.rest.map(entryName));
@@ -987,7 +1249,7 @@ async function zipDownloadSheet(d,paths){
   var joined=new Set(); mplan.groups.forEach(function(g){g.parts.forEach(function(p){joined.add(p);});});
   var apart=paths.filter(function(p){return !joined.has(p)&&window.AtlasPdf&&window.AtlasPdf.parsePart(basename(p));});
   var total=0; paths.forEach(function(p){total+=S.repo.files.get(p).size;});
-  var nameIn=el("input",{value:d.top.length===1?basename(d.top[0]):"download",autocapitalize:"off",autocomplete:"off",spellcheck:"false"});
+  var nameIn=el("input",{value:(zo&&zo.name)||(d.top.length===1?basename(d.top[0]):"download"),autocapitalize:"off",autocomplete:"off",spellcheck:"false"});
   var pwIn=el("input",{type:"password",placeholder:"Leave empty for no password",autocomplete:"new-password",autocapitalize:"off",spellcheck:"false"});
   var eye=el("button",{type:"button",class:"ibtn","aria-label":"Show or hide password",onclick:function(){var s=pwIn.type==="password";pwIn.type=s?"text":"password";eye.innerHTML=svg(s?"eyeoff":"eye");}});
   eye.innerHTML=svg("eye");
@@ -1013,8 +1275,8 @@ async function zipDownloadSheet(d,paths){
     el("p",{class:"hint"},"Strong works with 7-Zip, WinZip, and most Android apps. Choose Compatible if a built-in phone or Mac extractor can't open it; it is much weaker. Without a password, none of this applies."),
     total>400*MB?el("p",{class:"hint",style:"color:var(--warn)"},"This is a large download. It is built in memory, so it can fail on a phone."):null,
     progress,status);
-  openSheet({title:"Download as zip",content:content,actions:[
-    {label:"Cancel"},
+  openSheet({title:(zo&&zo.title)||"Download as zip",content:content,actions:[
+    {label:"Cancel",fn:function(a){zipFull=false;a.close();}},
     {label:"Download",kind:"primary",fn:async function(a){
       var nm=(nameIn.value.trim()||"download").replace(/[\\\/:*?"<>|]+/g,"_"), pw=pwIn.value;
       progress.hidden=false; progress.classList.add("run"); a.lock(true);
@@ -1119,6 +1381,22 @@ function gitSha(blob){
 function toBase64(blob){
   return new Promise(function(res,rej){var r=new FileReader();r.onload=function(){res(String(r.result).split(",")[1]||"");};r.onerror=function(){rej(r.error);};r.readAsDataURL(blob);});
 }
+/* shrink a photo before it is sent: scale the long side down and re-encode, and only use the result if it is smaller */
+var SHRINK_EXT={jpg:"image/jpeg",jpeg:"image/jpeg",png:"image/png",webp:"image/webp"};
+async function shrinkImage(name,blob,maxSide){
+  var type=SHRINK_EXT[extOf(name)]; if(!type||blob.size<200*1024||!window.createImageBitmap) return blob;
+  var bmp; try{ bmp=await createImageBitmap(blob); }catch(e){ return blob; }
+  try{
+    var sc=Math.min(1,maxSide/Math.max(bmp.width,bmp.height)), w=Math.max(1,Math.round(bmp.width*sc)), h=Math.max(1,Math.round(bmp.height*sc));
+    if(type==="image/png"&&sc===1) return blob;
+    var cv=document.createElement("canvas"); cv.width=w; cv.height=h; var cx=cv.getContext("2d");
+    if(type==="image/jpeg"){cx.fillStyle="#fff";cx.fillRect(0,0,w,h);}
+    cx.drawImage(bmp,0,0,w,h);
+    var out=await new Promise(function(res){cv.toBlob(res,type,0.82);});
+    cv.width=cv.height=0;
+    return (out&&out.size&&out.size<blob.size*0.95)?out:blob;
+  }catch(e){ return blob; }finally{ try{bmp.close();}catch(x){} }
+}
 async function sendItems(o){
   var sel=o.sel, policy=o.filePolicy, ui=o.ui, force=!!o.forceSame&&policy==="replace";
   await readRepoState();
@@ -1126,7 +1404,7 @@ async function sendItems(o){
   var ref=await gh("GET",api()+"/git/ref/heads/"+bp()); headSha=ref.object.sha;
   var cm=await gh("GET",api()+"/git/commits/"+headSha); treeSha=cm.tree.sha;
   var ctx=makeCtx(sel,o.dest,o.folderPolicy), taken=new Set();
-  var pending=[], pendingBytes=0, batchNo=0, R={added:0,replaced:0,renamed:0,same:0,skipped:0,split:0,parts:0,failed:[]};
+  var pending=[], pendingBytes=0, batchNo=0, R={added:0,replaced:0,renamed:0,same:0,skipped:0,split:0,parts:0,shrunk:0,saved:0,failed:[],todo:[]};
   async function commitBatch(){
     if(!pending.length) return; batchNo++;
     var t=await gh("POST",api()+"/git/trees",{base_tree:treeSha,tree:pending.map(function(p){return {path:p.path,mode:p.mode,type:p.type,sha:p.sha};})},true);
@@ -1154,8 +1432,9 @@ async function sendItems(o){
     pending.push({path:r.path,mode:mode,type:"blob",sha:res.sha,size:blob.size}); pendingBytes+=blob.size;
     if(r.action==="replace") R.replaced++; else if(r.action==="rename"){R.renamed++;ui.log(full+" saved as "+r.path,"warn");} else R.added++;
   }
+  var stoppedAt=sel.length;
   for(var i=0;i<sel.length;i++){
-    if(o.cancelled()) break;
+    if(o.cancelled()){ stoppedAt=i; break; }
     var f=sel[i], full=ctx.join(ctx.mapped(f.path));
     ui.progress(i/sel.length); ui.status((i+1)+" of "+sel.length+": "+f.path);
     try{
@@ -1164,7 +1443,7 @@ async function sendItems(o){
         var big=await f.getBlob();
         var parts=await window.AtlasPdf.split(big,maxBytes(),{status:function(t){ui.status((i+1)+" of "+sel.length+": "+f.path+". "+t);},cancelled:o.cancelled});
         big=null;
-        if(!parts) break;
+        if(!parts){ stoppedAt=i; break; }
         var dir=full.indexOf("/")>=0?full.slice(0,full.lastIndexOf("/")+1):"", stem=basename(full).replace(/\.pdf$/i,"");
         ui.log(f.path+" was split into "+plural(parts.length,"part")+": "+parts.map(function(p){return fmt(p.blob.size);}).join(", "),"ok");
         R.split++;
@@ -1174,19 +1453,27 @@ async function sendItems(o){
           if(pending.length>=BATCH_FILES||pendingBytes>=BATCH_BYTES) await commitBatch();
         }
       }else{
-        await sendOne(full,await f.getBlob());
+        var ob=await f.getBlob();
+        if(S.opts.shrink&&SHRINK_EXT[extOf(f.path)]){
+          ui.status((i+1)+" of "+sel.length+": shrinking "+f.path);
+          var sb=await shrinkImage(f.path,ob,S.opts.shrinkMax||2048);
+          if(sb!==ob){ R.shrunk++; R.saved+=ob.size-sb.size; ob=sb; }
+        }
+        await sendOne(full,ob);
       }
     }catch(e){
       if(e&&(e.status===401||e.status===403)&&!/rate limit|abuse|secondary/i.test(e.message)) throw e;
-      R.failed.push(f.path); ui.log("Failed: "+f.path+". "+(e&&e.message||e),"bad");
+      R.failed.push(f.path); R.todo.push(f.path); ui.log("Failed: "+f.path+". "+(e&&e.message||e),"bad");
     }
     if(pending.length>=BATCH_FILES||pendingBytes>=BATCH_BYTES) await commitBatch();
   }
   await commitBatch();
+  for(var q=stoppedAt;q<sel.length;q++) R.todo.push(sel[q].path);
   ui.progress(1);
   var parts2=[];
   if(R.added) parts2.push(R.added+" added"); if(R.replaced) parts2.push(R.replaced+" replaced"); if(R.renamed) parts2.push(R.renamed+" saved as copies");
   if(R.split) parts2.push(plural(R.split,"PDF")+" split into "+plural(R.parts,"part"));
+  if(R.shrunk) parts2.push(plural(R.shrunk,"photo")+" shrunk, "+fmt(R.saved)+" saved");
   if(R.skipped) parts2.push(R.skipped+" skipped"); if(R.same) parts2.push(R.same+" already identical");
   if(R.failed.length) parts2.push(R.failed.length+" failed");
   R.text=(o.cancelled()?"Stopped. ":"Done. ")+(parts2.length?parts2.join(", "):"Nothing to send")+".";
@@ -1209,6 +1496,12 @@ $("addFiles").onclick=function(){$("inFiles").click();};
 $("inFiles").addEventListener("change",function(e){
   var l=Array.from(e.target.files||[]); e.target.value=""; if(l.length) addFilesSheet(l);
 });
+function shrinkControls(){
+  var cb=el("input",{type:"checkbox",checked:!!S.opts.shrink,onchange:function(){S.opts.shrink=cb.checked;savePrefs();sg.hidden=!cb.checked;}});
+  var sg=el("div",{class:"field",hidden:!S.opts.shrink,style:"margin:4px 0 0 34px"},el("span",null,"Longest side"),seg([["1280","1280 px"],["2048","2048 px"],["3000","3000 px"]],String(S.opts.shrinkMax||2048),function(v){S.opts.shrinkMax=+v;savePrefs();}));
+  return el("div",null,el("label",{class:"check"},cb,"Shrink photos before uploading"),
+    el("p",{class:"hint",style:"margin:0 0 0 34px"},"JPG, PNG and WebP pictures are scaled down and re-saved smaller, only when that makes them smaller. Photo details such as location are removed. Other files are untouched."),sg);
+}
 function addFilesSheet(list){
   var holder={dest:S.lib.cwd}, policy=S.opts.filePolicy, limit=getLimit()*MB;
   var items=list.map(function(f){var c=classify(f.name,f.size);return {path:f.name,size:f.size,big:c.big,empty:c.empty,tooBig:c.tooBig,split:c.split,checked:!c.big,getBlob:function(){return Promise.resolve(f);}};});
@@ -1234,11 +1527,12 @@ function addFilesSheet(list){
   var forceRow=el("div",{hidden:policy!=="replace"},el("label",{class:"check"},forceCb,"Replace even if the file is identical"),el("p",{class:"hint",style:"margin:0 0 0 34px"},FORCE_HINT));
   var splitCb=el("input",{type:"checkbox",checked:!!S.opts.splitPdf,onchange:function(){S.opts.splitPdf=splitCb.checked;savePrefs();items.forEach(function(it){reclass(it,"path");});paintList();}});
   var splitRow=el("div",null,el("label",{class:"check"},splitCb,"Split large PDFs into parts"),el("p",{class:"hint",style:"margin:0 0 0 34px"},splitHint()));
+  var shrinkRow=shrinkControls();
   var content=el("div",null,
     el("div",{class:"field",style:"margin-top:0"},el("span",null,"Upload to"),dr),
     el("div",{class:"field"},el("span",null,"Files"),listEl),sumEl,planEl,
     el("div",{class:"field"},el("span",null,"If a file already exists"),seg([["skip","Skip"],["rename","Save as copy"],["replace","Replace"]],policy,function(v){policy=v;forceRow.hidden=v!=="replace";paintList();})),
-    forceRow,splitRow,
+    forceRow,splitRow,shrinkRow,
     progress,status,logEl);
   paintList();
   var sh=openSheet({title:"Add files",content:content,actions:[
@@ -1255,8 +1549,12 @@ function addFilesSheet(list){
       try{
         try{ if("wakeLock" in navigator) wl=await navigator.wakeLock.request("screen"); }catch(e){}
         var R=await sendItems({sel:sel,dest:dest,filePolicy:policy,folderPolicy:"merge",forceSame:S.opts.forceSame,ui:ui,cancelled:function(){return cancel;}});
-        status.textContent=R.text; ui.log(R.text,R.failed.length?"warn":"ok"); toast(R.text,R.failed.length>0);
-        S.act.loaded=false; goDir(dest); await loadRepo(); a.lock(false); a.close();
+        status.textContent=R.text; ui.log(R.text,R.todo.length?"warn":"ok"); toast(R.text,R.todo.length>0);
+        S.act.loaded=false; goDir(dest); await loadRepo();
+        if(R.todo.length){
+          var left=new Set(R.todo); items=items.filter(function(it){return left.has(it.path);}); items.forEach(function(it){it.checked=true;});
+          sh.btns[1].textContent="Retry "+items.length+" left"; ui.log("Tap “Retry "+items.length+" left” to finish. Files already saved are not sent again.","warn");
+        }else{ a.lock(false); a.close(); }
       }catch(e){
         var m=friendly(e); status.textContent="Stopped: "+m; ui.log("Error: "+m,"bad"); throw new Error(m);
       }finally{
@@ -1471,6 +1769,7 @@ function exSummary(){
   var fs=allFiles(S.ex.root), sel=fs.filter(function(f){return f.checked;}), bytes=sel.reduce(function(s,f){return s+f.size;},0);
   var big=sel.filter(function(f){return f.big;}).length, nsplit=sel.filter(function(f){return f.split;}).length;
   $("summary").textContent=sel.length+" of "+fs.length+" selected, "+fmt(bytes)+(big?", including "+big+" held back":"")+(nsplit?". "+plural(nsplit,"PDF")+" will be split":"");
+  $("go").textContent=(S.ex.retry&&S.ex.retry===sel.length)?"Retry "+S.ex.retry+" left":"Extract selected";
   $("go").disabled=!sel.length||S.ex.running||S.ex.locked.some(function(l){return l.kind==="zip";});
 }
 function upPreview(){
@@ -1548,8 +1847,11 @@ $("go").onclick=async function(){
     try{ if("wakeLock" in navigator) wl=await navigator.wakeLock.request("screen"); }catch(e){}
     var ui={status:function(t){$("status").textContent=t;},progress:function(f){$("bar").style.width=Math.round(f*100)+"%";},log:exLog};
     var R=await sendItems({sel:sel,dest:dest,filePolicy:S.opts.filePolicy,folderPolicy:"merge",forceSame:S.opts.forceSame,ui:ui,cancelled:function(){return S.ex.cancel;}});
-    $("status").textContent=R.text; exLog(R.text,R.failed.length?"warn":"ok"); toast(R.text,R.failed.length>0);
-    if(R.failed.length) exLog("Run it again to retry the files that failed.","warn");
+    $("status").textContent=R.text; exLog(R.text,R.todo.length?"warn":"ok"); toast(R.text,R.todo.length>0);
+    if(R.todo.length){
+      var left=new Set(R.todo); allFiles(S.ex.root).forEach(function(f){f.checked=left.has(f.path);}); S.ex.retry=R.todo.length; exRender();
+      exLog("Tap “Retry "+R.todo.length+" left” to finish. Only these are selected now.","warn");
+    }
     S.act.loaded=false; loadRepo();
   }catch(e){
     var m=friendly(e); $("status").textContent="Stopped: "+m; exLog("Error: "+m,"bad");
@@ -1611,6 +1913,7 @@ function currentDirFiles(path){
 async function openFile(path,o){
   if(!(o&&o.isNew)&&!S.repo.files.has(path)){toast("That file isn't in the repository.",true);return;}
   try{ await loadScript("app/viewer.js"); }catch(e){ toast(e.message,true); return; }
+  if(!(o&&o.isNew)) noteRecent(path);
   window.AtlasViewer.open(path,o||{});
 }
 async function downloadPath(path){
@@ -1733,9 +2036,15 @@ function setSearch(open){
   var w=$("searchWrap"); w.classList.toggle("open",open); w.inert=!open;
   $("searchBtn").setAttribute("aria-expanded",String(open)); $("searchBtn").classList.toggle("on",open);
   if(open) setTimeout(function(){try{$("libSearch").focus({preventScroll:true});}catch(e){}},200);
-  else if(S.lib.q){ S.lib.q=""; $("libSearch").value=""; renderLibrary(); }
+  else if(S.lib.q){ S.lib.q=""; S.lib.hits=null; searchTok++; $("libSearch").value=""; renderLibrary(); }
 }
 $("searchBtn").onclick=function(){setSearch(!$("searchWrap").classList.contains("open"));};
+document.addEventListener("keydown",function(e){
+  if(e.key!=="/"||e.ctrlKey||e.metaKey||e.altKey||S.tab!=="files"||!S.cfg||sheetStack.length) return;
+  var t=e.target; if(t&&t.closest&&t.closest("input,textarea,select,[contenteditable=true]")) return;
+  if(document.querySelector(".viewer")) return;
+  e.preventDefault(); setSearch(true);
+});
 $("libSearch").addEventListener("keydown",function(e){ if(e.key==="Escape"){e.preventDefault();e.stopPropagation();setSearch(false);$("searchBtn").focus();} });
 function fitConn(){
   var t=$("connName"); if(!t||!t.parentNode||$("shell").hidden) return;
@@ -1787,17 +2096,21 @@ $("menuBtn").addEventListener("click",function(){
   var list=el("div",{style:"display:grid;gap:6px"},
     tabs,
     el("div",{class:"field",style:"margin:6px 0 2px"},el("span",null,"Appearance"),seg([["light","Light"],["dark","Dark"],["night","Night"]],S.opts.theme||"dark",function(v){applyTheme(v);})),
+    el("div",{class:"field",style:"margin:6px 0 2px"},el("span",null,"Lock after no activity"),seg([["1","1 min"],["2","2 min"],["5","5 min"],["15","15 min"],["0","Never"]],String(S.opts.autoLock),function(v){S.opts.autoLock=+v;savePrefs();bump();})),
+    shrinkControls(),
     switchRow("Show app files",!S.opts.hideApp,function(v){S.opts.hideApp=!v;savePrefs();buildIndex();renderLibrary();renderSide();},"The files that make this app run (index.html and the app folder). They show with an app tag. Be careful changing them."),
     switchRow("Keep opened files for offline use",!!S.opts.offline,function(v){S.opts.offline=v;savePrefs();if(!v)clearOffline();},"Saves files you open on this device, unencrypted, so they open without a connection. Turn off on a shared device."),
     el("div",{style:"display:grid;gap:10px;margin-top:8px"},
       deferredInstall?el("button",{class:"btn block",type:"button",onclick:function(){closeAllSheets();deferredInstall.prompt();deferredInstall=null;}},"Install this app"):null,
+      el("button",{class:"btn block",type:"button",onclick:function(){closeAllSheets();branchSheet();}},ico("sort"),"Branch: "+S.cfg.branch),
+      el("button",{class:"btn block",type:"button",onclick:function(){closeAllSheets();backupSheet();}},ico("download"),"Back up whole repository"),
       el("button",{class:"btn block",type:"button",onclick:function(){closeAllSheets();switchSheet();}},ico("sort"),"Switch repository"),
       el("button",{class:"btn block",type:"button",onclick:function(){closeAllSheets();showSetup(S.pid);}},"Edit details"),
       el("button",{class:"btn block",type:"button",onclick:function(){closeAllSheets();manageSheet();}},"Saved repositories"),
       el("button",{class:"btn block",type:"button",onclick:function(){closeAllSheets();lockNow();}},ico("lock"),"Log out"),
       el("button",{class:"btn block",type:"button",onclick:async function(){await clearOffline();toast("Offline files cleared");}},"Clear offline files"),
       el("button",{class:"btn block",type:"button",style:"color:var(--danger)",onclick:function(){closeAllSheets();resetDeviceSheet();}},"Reset this device")));
-  openSheet({title:"Menu",content:list,actions:[{label:"Close"}]});
+  openSheet({title:"Menu",content:el("div",null,list,el("p",{class:"credit"},"Created by Gokul Chandar")),actions:[{label:"Close"}]});
 });
 if("serviceWorker" in navigator&&/^https?:/.test(location.protocol)){ window.addEventListener("load",function(){navigator.serviceWorker.register("sw.js").catch(function(){});}); }
 
@@ -1809,4 +2122,5 @@ async function previewExtract(k){
 /* ================= boot ================= */
 loadPrefs(); buildSegs(); hydrateIcons();
 migrateOld(); PF=readStore(); showHome();
+if(shareWaiting) setTimeout(function(){toast("Log in to add the files you shared");},400);
 })();

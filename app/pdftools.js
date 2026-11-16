@@ -105,5 +105,30 @@ async function merge(blobs,onStatus){
   return new Blob([await out.save({useObjectStreams:true})],{type:"application/pdf"});
 }
 
-window.AtlasPdf={split:split,merge:merge,planMerge:planMerge,partName:partName,parsePart:parsePart};
+/* "1-3, 5, 8-" -> [0,1,2,4,7,...] (zero-based page numbers); throws a readable error when the text can't be used */
+function parseRanges(text,n){
+  var out=[], seen=new Set(), parts=String(text||"").split(/[,;\s]+/).filter(Boolean), i, m, a, b, k;
+  if(!parts.length) throw new Error("Enter the pages, for example 1-3, 5.");
+  for(i=0;i<parts.length;i++){
+    m=/^(\d*)(?:-(\d*))?$/.exec(parts[i]);
+    if(!m||(m[1]===""&&m[2]===undefined)) throw new Error("“"+parts[i]+"” isn't a page or a range. Use numbers like 1-3, 5.");
+    a=m[1]===""?1:+m[1]; b=m[2]===undefined?a:(m[2]===""?n:+m[2]);
+    if(a<1||b<1||a>n||b>n) throw new Error("This PDF has "+n+" pages. “"+parts[i]+"” is outside that.");
+    if(b<a) throw new Error("“"+parts[i]+"” goes backwards. Write it as "+b+"-"+a+".");
+    for(k=a;k<=b;k++) if(!seen.has(k)){seen.add(k);out.push(k-1);}
+  }
+  return out;
+}
+async function pageCount(blob){ return (await openPdf(blob)).getPageCount(); }
+async function extract(blob,idx){
+  var src=await openPdf(blob), P=lib(), out=await P.PDFDocument.create(), pages=await out.copyPages(src,idx);
+  pages.forEach(function(pg){out.addPage(pg);});
+  return new Blob([await out.save({useObjectStreams:true})],{type:"application/pdf"});
+}
+async function rotate(blob,idx,deg){
+  var src=await openPdf(blob), P=lib(), pages=src.getPages(), i;
+  for(i=0;i<idx.length;i++){ var pg=pages[idx[i]]; pg.setRotation(P.degrees(((pg.getRotation().angle+deg)%360+360)%360)); }
+  return new Blob([await src.save({useObjectStreams:true})],{type:"application/pdf"});
+}
+window.AtlasPdf={split:split,merge:merge,planMerge:planMerge,partName:partName,parsePart:parsePart,parseRanges:parseRanges,pageCount:pageCount,extract:extract,rotate:rotate};
 })();
