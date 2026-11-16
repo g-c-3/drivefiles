@@ -7,7 +7,10 @@ def tab(page,n):
     if page.locator(f"#sideNav [data-tab={n}]").first.is_visible(): page.locator(f"#sideNav [data-tab={n}]").first.click(); return
     OPENMENU(); page.locator(".layer.open .menutabs button",has_text=n.capitalize()).click(); page.wait_for_timeout(350)
 def rows(page): return page.locator("#libList .row .name").all_inner_texts()
-def sheet_click(page,label): page.locator(".layer.open .foot .btn",has_text=label).last.click()
+def sheet_click(page,label):
+    l=page.locator(".layer.open .foot .btn",has_text=label)
+    if label=="Close" and page.locator(".layer.open .xbtn").count() and not l.count(): page.locator(".layer.open .xbtn").last.click()
+    else: l.last.click()
 def cur_text(path): return blob_data[cur()[path]["sha"]]
 with sync_playwright() as p:
     b=p.chromium.launch()
@@ -337,8 +340,8 @@ with sync_playwright() as p:
     page.screenshot(path=SHOTS+"/v6_files.png"); OPENMENU(); page.wait_for_timeout(500); page.screenshot(path=SHOTS+"/v6_menu.png"); sheet_click(page,"Close"); page.wait_for_timeout(400)
     # ---- header: icon buttons on the title line, smooth search ----
     page.wait_for_selector("#libList .row")
-    tt=page.locator(".pagehead .page-title").bounding_box(); ad=page.locator("#addFiles").bounding_box()
-    check(abs((tt["y"]+tt["height"]/2)-(ad["y"]+ad["height"]/2))<10,"buttons sit on the Files title line")
+    tt=page.locator("#libStat").bounding_box(); ad=page.locator("#addFiles").bounding_box()
+    check(abs((tt["y"]+tt["height"]/2)-(ad["y"]+ad["height"]/2))<10,"buttons share a line with the file count")
     check(all(page.locator("#"+i).is_visible() for i in ["searchBtn","libRefresh","sortBtn","newFolder","newFile","addFiles"]) and "New folder" not in page.inner_text(".tools"),"six icon buttons, no text")
     check(page.locator("#searchWrap").evaluate("e=>getComputedStyle(e).visibility")=="hidden","search starts closed")
     total_rows=len(rows(page))

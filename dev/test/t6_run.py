@@ -7,7 +7,10 @@ fails=[]
 def check(c,m):
     print(("PASS " if c else "FAIL ")+m, flush=True)
     if not c: fails.append(m)
-def sheet_click(page,label): page.locator(".layer.open .foot .btn",has_text=label).last.click()
+def sheet_click(page,label):
+    l=page.locator(".layer.open .foot .btn",has_text=label)
+    if label=="Close" and page.locator(".layer.open .xbtn").count() and not l.count(): page.locator(".layer.open .xbtn").last.click()
+    else: l.last.click()
 def toast(page,txt,t=30000): page.wait_for_function("t=>Array.from(document.querySelectorAll('.toast')).some(e=>e.textContent.includes(t))",arg=txt,timeout=t)
 def mkpdf(n,name):
     ims=[]
@@ -155,7 +158,10 @@ with sync_playwright() as p:
     # ---- header, lock, repo root, floating home, no app-files switch ----
     page.wait_for_selector("#libList .row")
     box=page.locator("#menuBtn").bounding_box(); ab=page.locator("#addFiles").bounding_box()
-    check(abs(box["y"]-ab["y"])<40 and box["x"]>ab["x"],"menu dots sit after Add files")
+    lk=page.locator("#lockBtn").bounding_box()
+    check(abs((box["x"]+box["width"]/2)-(lk["x"]+lk["width"]/2))<1.5 and box["x"]>ab["x"],"menu dots are centred under the lock button and after Add files")
+    check(page.locator("#libStat").inner_text().strip()!="" and page.locator(".pagehead .page-title").count()==0,"file count replaces the big Files title")
+    check(page.locator(".tile.fold").first.evaluate("e=>getComputedStyle(e).boxShadow").count("rgba")>=2,"folders glow")
     check(page.locator(".titlebar #menuBtn").count()==0 and page.locator(".titlebar #lockBtn").count()==1,"lock button replaced the dots in the top bar")
     OPENMENU(); page.wait_for_selector(".layer.open")
     check("Show app files" not in page.inner_text(".layer.open"),"Show app files is gone")

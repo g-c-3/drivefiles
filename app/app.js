@@ -83,8 +83,9 @@ function ago(iso){
 }
 function hue(name){var h=0,i;for(i=0;i<name.length;i++) h=(h*31+name.charCodeAt(i))>>>0; return (h*47)%360;}
 var FOLDER_SVG='<svg viewBox="0 0 32 32" fill="currentColor"><path opacity=".5" d="M3 8a3 3 0 0 1 3-3h6l3 3h11a3 3 0 0 1 3 3v13a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3z"/><path d="M3 13a3 3 0 0 1 3-3h20a3 3 0 0 1 3 3v11a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3z"/></svg>';
-function folderTile(name){var t=el("span",{class:"tile fold"+((!name||name==="/")?" neon":""),style:"--h:"+hue(name||"/")});t.innerHTML=FOLDER_SVG;return t;}
-function folderMini(name){var t=el("span",{class:"mini"+((!name||name==="/")?" neon":""),style:"--h:"+hue(name||"/")});t.innerHTML=FOLDER_SVG;return t;}
+function neonHue(name){return (!name||name==="/")?155:hue(name);}
+function folderTile(name){var t=el("span",{class:"tile fold"+((!name||name==="/")?" neon":""),style:"--h:"+neonHue(name)});t.innerHTML=FOLDER_SVG;return t;}
+function folderMini(name){var t=el("span",{class:"mini"+((!name||name==="/")?" neon":""),style:"--h:"+neonHue(name)});t.innerHTML=FOLDER_SVG;return t;}
 function fileTile(name){var d=name.lastIndexOf("."), ext=d>0?name.slice(d+1,d+5):"";return el("span",{class:"tile file"},ext.toUpperCase());}
 function toast(msg,bad){
   var t=el("div",{class:"toast"+(bad?" bad":""),role:"status"},msg);
@@ -676,7 +677,7 @@ function openSheet(o){
     btns.push(b); foot.appendChild(b);
   });
   var panel=el("div",{class:"sheet",role:"dialog","aria-modal":"true"},
-    sbar,el("h2",null,o.title), o.sub?el("p",{class:"muted"},o.sub):null,
+    sbar,o.closeX?el("div",{class:"shead"},el("h2",null,o.title),el("button",{type:"button",class:"xbtn","aria-label":"Close",title:"Close",onclick:function(){if(!layer._locked)closeLayer(layer);}},ico("x"))):el("h2",null,o.title), o.sub?el("p",{class:"muted"},o.sub):null,
     el("div",{class:"body"},o.content), errEl, o.noFooter?null:foot);
   layer.append(el("div",{class:"backdrop",onclick:function(){if(!layer._locked)closeLayer(layer);}}),panel);
   $("sheetRoot").appendChild(layer); sheetStack.push(layer);
@@ -715,8 +716,19 @@ function setTabRaw(name){
   if(name==="extract"){ if(!S.ex.destTouched) S.ex.dest=S.lib.cwd; paintExDest(); upPreview(); }
   if(name==="history"&&!S.act.loaded) loadActivity();
   updateActionbar(); $("pane").scrollTop=0; window.scrollTo(0,0);
-  placeHome();
+  placeHome(); alignDots();
 }
+/* keep the three dots centred under the lock button without moving the other buttons */
+function alignDots(){
+  var m=$("menuBtn"), l=$("lockBtn"); if(!m||!l||S.tab!=="files") return;
+  requestAnimationFrame(function(){
+    m.style.transition="none"; m.style.transform="none"; var a=m.getBoundingClientRect(), b=l.getBoundingClientRect();
+    if(a.width&&b.width) m.style.transform="translateX("+((b.left+b.width/2)-(a.left+a.width/2)).toFixed(1)+"px)";
+  });
+}
+window.addEventListener("resize",alignDots);
+if(window.ResizeObserver){ new ResizeObserver(function(){alignDots();}).observe(document.querySelector(".pagehead")); }
+setTimeout(alignDots,600);
 /* floating Home button on Extract and History: sits level with the page title and stays put while the page scrolls */
 var homeY=null;
 function placeHome(){
@@ -2136,7 +2148,7 @@ $("menuBtn").addEventListener("click",function(){
       el("button",{class:"btn block",type:"button",onclick:function(){closeAllSheets();lockNow();}},ico("lock"),"Log out"),
       el("button",{class:"btn block",type:"button",onclick:async function(){await clearOffline();toast("Offline files cleared");}},"Clear offline files"),
       el("button",{class:"btn block",type:"button",style:"color:var(--danger)",onclick:function(){closeAllSheets();resetDeviceSheet();}},"Reset this device")));
-  openSheet({title:"Menu",content:el("div",null,list,el("p",{class:"credit"},"Created by Gokul Chandar")),actions:[{label:"Close"}]});
+  openSheet({title:"Menu",content:el("div",null,list,el("p",{class:"credit"},"Created by Gokul Chandar")),noFooter:true,closeX:true,actions:[]});
 });
 if("serviceWorker" in navigator&&/^https?:/.test(location.protocol)){ window.addEventListener("load",function(){navigator.serviceWorker.register("sw.js").catch(function(){});}); }
 

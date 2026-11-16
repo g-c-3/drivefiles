@@ -96,14 +96,14 @@ Your details never leave the device except to GitHub.
 
 ## Moving around
 
-- The **⋮ menu** button is the last button on the Files line, right after Add files. It holds Files, Extract and History, the **Light / Dark / Night** switch and the settings. The **lock** button at the top right locks Atlas straight away, with a short fade, and returns to the login screen.
+- The Files line shows the file count and size in small grey text, with the buttons on the same line. Both shrink to fit the screen. The **⋮ menu** button is the last button on the line, right after Add files, centred under the lock button and with a soft glow. The menu closes with the **✕** beside its title. It holds Files, Extract and History, the **Light / Dark / Night** switch and the settings. The **lock** button at the top right locks Atlas straight away, with a short fade, and returns to the login screen.
 - On **Extract** and **History** a floating **Home** button sits level with the page title and stays in place while you scroll. Tap it to go to Files. Dark is the default, Light is white, and Night is pure black for OLED screens. Your choice is remembered.
 - The **Back button or gesture** works inside the app: it closes a window or the viewer, goes up a folder, or leaves a tab, instead of leaving the site. At the top of a repository, press Back twice to log out and return to the login screen. On the login screen, one Back stays put and two quick Backs leave to the page you came from. Back is refused while a job is running.
 - **Right-click is switched off** across the app, except in fields where you type (names, token, passcode, limit, the editor). This only removes the browser's menu; it doesn't protect anything.
 
 ## Files tab
 
-- The buttons on the **Files** line are, left to right: **Search** (slides open and closed), **Refresh**, **Sort**, **New folder**, **New file** and **Add files**. Press and hold or hover for the name.
+- The buttons on the Files line are, left to right: **Search** (slides open and closed), **Refresh**, **Sort**, **New folder**, **New file** and **Add files**. Press and hold or hover for the name.
 - Tap a folder to open it; tap a file to **open it in the viewer**. Tick checkboxes (or **Select all**) to select.
 - The action bar offers **Download · Copy · Move · Rename · Convert · Delete**.
 - **Move** and **Copy** show your folders as a **tree**. Tap to choose a folder, tap the arrow to open it, or create a new folder right there.
