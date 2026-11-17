@@ -1089,10 +1089,8 @@ function renderLibrary(){
       x.dir?el("span",{class:"muted"},ico("chev")):null);
     row.addEventListener("click",function(e){
       if(e.target===cb) return;
-      if(!S.lib.sel.size){ if(x.dir){goDir(x.path);window.scrollTo(0,0);}else openFile(x.path); return; }
-      if(inherited) return;
-      if(S.lib.sel.has(x.path)) S.lib.sel.delete(x.path); else S.lib.sel.add(x.path);
-      renderLibrary();
+      /* tapping a row always opens it; only the checkbox selects */
+      if(x.dir){goDir(x.path);window.scrollTo(0,0);}else openFile(x.path);
     });
     list.appendChild(row);
   });
