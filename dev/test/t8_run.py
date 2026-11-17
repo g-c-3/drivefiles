@@ -77,7 +77,7 @@ with sync_playwright() as p:
     # ---- second change in same session: no second backup; replaced + compressed pdf ----
     page.evaluate("localStorage.setItem('a_prefs',JSON.stringify({filePolicy:'replace',limit:3,compressPdf:true,compressLevel:'strong',splitPdf:true}))")
     page.reload(); page.wait_for_selector("#s-home:not([hidden])")
-    page.click("#homeLogin"); page.wait_for_selector(".layer.open input[type=password]"); page.fill(".layer.open input[type=password]","a"); page.keyboard.press("Enter"); page.wait_for_selector("#libList .row")
+    page.click("#homeLogin"); page.wait_for_selector(".layer.open input[type=password]"); page.fill(".layer.open input[type=password]","a"); page.keyboard.press("Enter"); page.wait_for_selector("#shell:not([hidden])"); page.wait_for_timeout(1500); (page.click("#fHome"), page.wait_for_selector("#libList .row")) if not page.locator("#libList .row").first.is_visible() else None; page.wait_for_selector("#libList .row")
     tab(page,"extract")
     page.set_input_files("#inArch","/tmp/r2.zip"); page.wait_for_selector("#tree .row"); page.wait_for_timeout(500)
     page.click("#go"); page.wait_for_selector("#resTabs:not([hidden])",timeout=170000)
@@ -95,7 +95,7 @@ with sync_playwright() as p:
     # ---- backup failing: one toast, change still goes through ----
     page.evaluate("document.querySelector('#lockBtn').click()"); page.wait_for_selector("#s-home:not([hidden])",timeout=10000); page.wait_for_timeout(900)
     REL["fail"]=True
-    page.click("#homeLogin"); page.wait_for_selector(".layer.open input[type=password]"); page.fill(".layer.open input[type=password]","a"); page.keyboard.press("Enter"); page.wait_for_selector("#libList .row")
+    page.click("#homeLogin"); page.wait_for_selector(".layer.open input[type=password]"); page.fill(".layer.open input[type=password]","a"); page.keyboard.press("Enter"); page.wait_for_selector("#shell:not([hidden])"); page.wait_for_timeout(1500); (page.click("#fHome"), page.wait_for_selector("#libList .row")) if not page.locator("#libList .row").first.is_visible() else None; page.wait_for_selector("#libList .row")
     open(BASE+"/okfile.txt","wb").write(b"fine file")
     page.set_input_files("#inFiles",[BASE+"/okfile.txt"]); page.wait_for_selector(".layer.open .foot")
     page.locator(".layer.open .foot .btn",has_text="Upload").last.click()
@@ -119,7 +119,7 @@ with sync_playwright() as p:
     REL["fail"]=False; before=len(releases)
     page.wait_for_selector(".layer.open",state="detached",timeout=60000)
     page.evaluate("document.querySelector('#lockBtn').click()"); page.wait_for_selector("#s-home:not([hidden])"); page.wait_for_timeout(900)
-    page.click("#homeLogin"); page.wait_for_selector(".layer.open input[type=password]"); page.fill(".layer.open input[type=password]","a"); page.keyboard.press("Enter"); page.wait_for_selector("#libList .row")
+    page.click("#homeLogin"); page.wait_for_selector(".layer.open input[type=password]"); page.fill(".layer.open input[type=password]","a"); page.keyboard.press("Enter"); page.wait_for_selector("#shell:not([hidden])"); page.wait_for_timeout(1500); (page.click("#fHome"), page.wait_for_selector("#libList .row")) if not page.locator("#libList .row").first.is_visible() else None; page.wait_for_selector("#libList .row")
     OPENMENU(); page.locator(".layer.open label.check",has_text="Recovery backup").locator("input").uncheck(); page.locator(".layer.open .xbtn").click(); page.wait_for_timeout(500)
     open(BASE+"/loose.txt","wb").write(b"loose")
     page.set_input_files("#inFiles",[BASE+"/loose.txt"]); page.wait_for_selector(".layer.open .foot"); page.locator(".layer.open .foot .btn",has_text="Upload").last.click()

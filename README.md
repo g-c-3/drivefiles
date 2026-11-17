@@ -208,6 +208,7 @@ Folders are always merged: new files go into the folder that's already there. Th
 - **Search listing.** `index.html` carries titles, description, keywords, canonical, Open Graph, JSON-LD (alternate names such as GitManager, Manager for GitHub, File Explorer for GitHub, Atlas for Git) plus `robots.txt` and `sitemap.xml`. This makes the site eligible to be found; it cannot guarantee ranking. Submit `https://g-c-3.github.io/githubmanager/` in Google Search Console and Bing Webmaster Tools to speed it up. The page is public, but it holds no repository data.
 - **Smoothness.** Pages, folders, the viewer, sheets, switches and segmented controls ease in and out instead of jumping; all of it is switched off by the system's reduced-motion setting.
 - **Toasts** show an icon, a title and an optional detail line with a countdown; tap one to close it.
+- **Pick up where you left off.** When Atlas locks (auto-lock, the lock button, or the browser putting the page away) it remembers the tab, folder, open file and whether Settings was open, and returns there after you log in (within 7 days, same branch). Unsaved edits are not kept, and the opened file is always closed on lock so nothing stays on screen.
 - **Tidier chrome.** Grouped Settings with toggle switches, compact viewer header and bottom bar, tighter top spacing.
 
 ## Settings, toolbar and selection (latest)

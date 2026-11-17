@@ -695,5 +695,5 @@ async function renderHex(item,blob,token){
   await chunk();
 }
 
-window.AtlasViewer={open:open,openBlob:openBlob,close:close};
+window.AtlasViewer={open:open,openBlob:openBlob,close:close,current:function(){return (V.item&&V.item.real&&!root.hidden&&!root.classList.contains("vout"))?V.item.path:null;}};
 })();

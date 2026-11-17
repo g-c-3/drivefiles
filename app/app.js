@@ -284,7 +284,9 @@ function showScreen(name){
 }
 function curProfile(){return S.pid?findProf(S.pid):null;}
 function lockNow(){
-  clearToasts(); S.bk=null;
+  saveResume(); clearToasts(); S.bk=null;
+  /* never leave an opened file on screen behind the lock */
+  try{ if(window.AtlasViewer){ window.AtlasViewer.close(true); var vr=document.getElementById("viewer"); if(vr) vr.hidden=true; } }catch(e){}
   S.cfg=null; S.pass=null; S.pid=null; resetRepo(); S.lib.sel.clear(); closeAllSheets();
   showHome();
 }
@@ -979,11 +981,33 @@ async function commitEntries(entries,message,prog){
   await gh("PATCH",api()+"/git/refs/heads/"+bp(),{sha:nc.sha},"fast");
   P(1,"Saved");
 }
+/* pick up where you left off: the page you were on is remembered when you lock, leave, or the browser puts the page away */
+function resumeKey(pid){return "a_resume_"+pid;}
+function saveResume(){
+  if(!S.pid||!S.cfg||!S.repo||!S.repo.loaded) return;
+  var v=null; try{ v=(window.AtlasViewer&&window.AtlasViewer.current&&window.AtlasViewer.current())||null; }catch(e){}
+  var st={t:S.tab,d:S.lib.cwd||"",v:v,s:!!document.querySelector(".layer.open .menu"),b:S.cfg.branch,ts:Date.now()};
+  try{ localStorage.setItem(resumeKey(S.pid),JSON.stringify(st)); }catch(e){}
+}
+function applyResume(){
+  if(!S.cfg||!S.pid) return;
+  var raw=null; try{ raw=JSON.parse(localStorage.getItem(resumeKey(S.pid))||"null"); }catch(e){}
+  if(!raw||raw.b!==S.cfg.branch||Date.now()-raw.ts>7*864e5||!S.repo.loaded) return;
+  try{ localStorage.removeItem(resumeKey(S.pid)); }catch(e){}
+  var d=raw.d&&S.repo.dirs.has(raw.d)?raw.d:"";
+  if(d) goDirRaw(d);
+  if(raw.t==="extract"||raw.t==="history") setTab(raw.t);
+  if(raw.v&&S.repo.files.has(raw.v)) setTimeout(function(){ openFile(raw.v); },250);
+  if(raw.s){ var tries=0; (function again(){ if(!S.cfg||++tries>20) return; if(document.querySelector(".layer.open")) return setTimeout(again,250); $("menuBtn").click(); })(); }
+}
+document.addEventListener("visibilitychange",function(){ if(document.hidden) saveResume(); });
+window.addEventListener("pagehide",saveResume);
 function enterApp(){
   showScreen("shell"); buildTabs(); hydrateIcons();
   S.lib.sel.clear(); S.lib.cwd=""; S.lib.q=""; $("libSearch").value=""; $("searchWrap").classList.remove("open"); $("searchWrap").inert=true; $("searchBtn").classList.remove("on"); S.ex.destTouched=false; S.ex.dest="";
   $("connName").textContent=S.cfg.repo; $("connDot").classList.remove("off"); fitConn();
-  Nav.dropKind("view"); setTabRaw("files"); loadRepo();
+  Nav.dropKind("view"); setTabRaw("files");
+  var wasShare=shareWaiting; loadRepo().then(function(){ if(!wasShare) applyResume(); });
   if(shareWaiting){ shareWaiting=false; takeShared(); }
 }
 /* files shared to Atlas from another Android app (installed app only): the service worker parks them until you log in */
