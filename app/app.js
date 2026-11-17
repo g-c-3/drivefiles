@@ -28,6 +28,8 @@ var ICONS={
  lock:'<rect x="5" y="11" width="14" height="9" rx="2.5"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
  search:'<circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/>',
  refresh:'<path d="M20 11a8 8 0 0 0-14.5-3.5"/><path d="M5 3.5v4h4"/><path d="M4 13a8 8 0 0 0 14.5 3.5"/><path d="M19 20.5v-4h-4"/>',
+ check:'<path d="M5 12.5l4.5 4.5L19 7.5"/>',
+ alert:'<path d="M12 7v6"/><path d="M12 16.8v.01"/>',
  gear:'<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>',
  dots:'<circle cx="12" cy="5" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="12" cy="19" r="1.7"/>',
  x:'<path d="M6 6l12 12M18 6 6 18"/>',
@@ -73,6 +75,12 @@ function fmt(n){
   if(n<1024*MB) return (n/MB).toFixed(1)+" MB";
   return (n/1024/MB).toFixed(2)+" GB";
 }
+/* parts joined by a centred dot (a fragment, so it can go anywhere text can) */
+function dots(parts){
+  var f=document.createDocumentFragment(), first=true;
+  parts.forEach(function(t){ if(t==null||t==="") return; if(!first){ f.appendChild(document.createTextNode(" ")); f.appendChild(el("i",{class:"sd","aria-hidden":"true"})); f.appendChild(document.createTextNode(" ")); } first=false; f.appendChild(document.createTextNode(t)); });
+  return f;
+}
 function plural(n,w){return n+" "+w+(n===1?"":"s");}
 function sleep(ms){return new Promise(function(r){setTimeout(r,ms);});}
 function ago(iso){
@@ -88,10 +96,14 @@ function neonHue(name){return (!name||name==="/")?155:hue(name);}
 function folderTile(name){var t=el("span",{class:"tile fold"+((!name||name==="/")?" neon":""),style:"--h:"+neonHue(name)});t.innerHTML=FOLDER_SVG;return t;}
 function folderMini(name){var t=el("span",{class:"mini"+((!name||name==="/")?" neon":""),style:"--h:"+neonHue(name)});t.innerHTML=FOLDER_SVG;return t;}
 function fileTile(name){var d=name.lastIndexOf("."), ext=d>0?name.slice(d+1,d+5):"";return el("span",{class:"tile file"},ext.toUpperCase());}
-function toast(msg,bad,ms){
-  var t=el("div",{class:"toast"+(bad?" bad":""),role:"status"},msg);
+function toast(msg,bad,ms,sub){
+  var dur=ms||(bad?6500:3400);
+  var t=el("div",{class:"toast"+(bad?" bad":""),role:bad?"alert":"status",style:"--dur:"+dur+"ms",onclick:function(){fadeToast(t);}},
+    el("span",{class:"tic"},ico(bad?"alert":"check")),
+    el("div",{class:"ttx"},el("b",null,msg),sub?el("small",null,sub):null),
+    el("i",{class:"tbar","aria-hidden":"true"}));
   $("toasts").appendChild(t);
-  setTimeout(function(){ fadeToast(t); },ms||(bad?6500:3400));
+  setTimeout(function(){ fadeToast(t); },dur);
 }
 function fadeToast(t){ if(!t.parentNode||t.classList.contains("out")) return; t.classList.add("out"); setTimeout(function(){ if(t.parentNode) t.parentNode.removeChild(t); },260); }
 function clearToasts(){ Array.prototype.forEach.call($("toasts").children,fadeToast); }
@@ -703,13 +715,23 @@ function openSheet(o){
   return api;
 }
 function seg(opts,value,onChange){
-  var wrap=el("div",{class:"seg"});
+  var wrap=el("div",{class:"seg"}), pill=el("i",{class:"segpill","aria-hidden":"true"}), ready=false;
+  function move(){
+    var b=wrap.querySelector("button[aria-pressed=true]");
+    if(!b||!b.offsetWidth){ wrap.classList.remove("sp"); return; }
+    pill.style.width=b.offsetWidth+"px"; pill.style.height=b.offsetHeight+"px"; pill.style.borderRadius=getComputedStyle(b).borderRadius;
+    pill.style.transform="translate("+b.offsetLeft+"px,"+b.offsetTop+"px)";
+    if(!ready){ ready=true; pill.style.transition="none"; wrap.classList.add("sp"); void pill.offsetWidth; pill.style.transition=""; } else wrap.classList.add("sp");
+  }
+  wrap.appendChild(pill);
   opts.forEach(function(o){
     wrap.appendChild(el("button",{type:"button","aria-pressed":String(o[0]===value),onclick:function(){
       onChange(o[0]);
       wrap.querySelectorAll("button").forEach(function(b,i){b.setAttribute("aria-pressed",String(opts[i][0]===o[0]));});
+      move();
     }},o[1]));
   });
+  if(window.ResizeObserver) new ResizeObserver(move).observe(wrap);
   return wrap;
 }
 
@@ -770,6 +792,16 @@ function isChange(method,path){
   if(method==="GET"||method==="HEAD") return false;
   return /\/git\/(blobs|trees|commits)|\/contents\/|\/merges$/.test(path)||(method==="PATCH"&&/\/git\/refs\//.test(path));
 }
+function backupPrompt(why){
+  return new Promise(function(res){
+    var done=false; function fin(v){ if(done) return; done=true; res(v); }
+    openSheet({title:"Automatic backup couldn't be made",
+      content:el("div",null,el("p",null,why+" Atlas normally saves a RecoveryBackup release of the whole repository before your first change."),
+        el("p",{class:"hint"},"Download a full backup now and then repeat your change, or continue without one.")),
+      actions:[{label:"Continue without backup",fn:async function(a){fin("go");a.close();}},{label:"Back up now",kind:"primary",fn:async function(a){fin("backup");a.close();}}],
+      onClose:function(){fin("cancel");}});
+  });
+}
 function ensureBackup(){
   if(!S.opts.recovery||!S.cfg) return Promise.resolve();
   if(S.bk) return S.bk;
@@ -780,9 +812,15 @@ function ensureBackup(){
     var name="RecoveryBackup "+fmtStamp(now);
     try{
       await gh("POST",base+"/releases",{tag_name:tag,target_commitish:cfg.branch,name:name,body:"Automatic recovery copy of the whole repository ("+cfg.branch+") made by Atlas before the first change of a session. Use the Source code (zip) below to restore.",draft:false,prerelease:false},"fast");
-      toast("Recovery backup saved: "+name,false,4200);
+      toast("Backup saved in Repo Releases",false,5000,name);
     }catch(e){
-      toast("Couldn't create a recovery backup ("+(e.status===403||e.status===404?"token can't create releases":"error")+"). Please run a full backup: Menu › Back up whole repository.",true,9000);
+      var why=(e.status===403||e.status===404)?"Your token isn't allowed to create releases.":"GitHub didn't accept the request.";
+      var choice=await backupPrompt(why);
+      if(choice!=="go"){
+        S.bk=null;
+        if(choice==="backup") setTimeout(backupSheet,420);
+        throw new Error(choice==="backup"?"Nothing was changed. Finish the full backup, then try again.":"Nothing was changed.");
+      }
     }
   })();
   return S.bk;
@@ -981,10 +1019,12 @@ function goDir(path){
 }
 function goDirRaw(path){
   if(path!==S.lib.cwd&&!S.opts.keepSel&&S.lib.sel.size) S.lib.sel.clear();
+  var prev=S.lib.cwd||"", dirDir=path===prev?"":((path.length>prev.length&&(prev===""||path.indexOf(prev+"/")===0))?"in":"out");
   S.lib.cwd=path; S.lib.q=""; $("libSearch").value="";
   var parts=path?path.split("/"):[], acc="";
   parts.forEach(function(p){acc=joinPath(acc,p);S.lib.exp.add(acc);});
   setTabRaw("files");
+  if(dirDir){ var ll=$("libList"); ll.classList.remove("go-in","go-out"); void ll.offsetWidth; ll.classList.add("go-"+dirDir); clearTimeout(ll._t); ll._t=setTimeout(function(){ll.classList.remove("go-in","go-out");},420); }
 }
 function renderSide(){
   var box=$("sideTree"); box.replaceChildren();
@@ -1042,7 +1082,7 @@ function renderLibrary(){
   }
   if(!r.loaded) return;
   var total=0; r.files.forEach(function(f,p){if(!S.opts.hideApp||!isApp(p))total+=f.size;});
-  $("libStat").textContent=plural(countVisibleFiles(),"file")+", "+fmt(total)+(r.truncated?" (list is partial)":"");
+  $("libStat").replaceChildren(dots([plural(countVisibleFiles(),"file"),fmt(total),r.truncated?"list is partial":null]));
   var q=S.lib.q.trim();
   if(q){
     $("libCrumbs").appendChild(el("span",{class:"muted small",style:"padding:7px 9px"},"Results for “"+q+"”"));
@@ -1399,7 +1439,7 @@ async function zipDownloadSheet(d,paths,zo){
       apart.length?el("p",{class:"hint",style:"margin:8px 0 0 34px"},apart.map(basename).join(", ")+(apart.length>1?" stay":" stays")+" separate because the pages aren't continuous."):null);
   }
   var content=el("div",null,
-    el("p",{class:"muted"},plural(paths.length,"file")+", "+fmt(total)+" will be packed into one zip file."),
+    el("p",{class:"muted"},dots([plural(paths.length,"file"),fmt(total),"packed into one zip file"])),
     joinBox,
     el("label",{class:"field"},el("span",null,"File name"),nameIn),
     el("label",{class:"field"},el("span",null,"Password",el("i",null,"optional")),el("div",{class:"pw"},pwIn,eye)),
@@ -1672,7 +1712,7 @@ function addFilesSheet(list){
       listEl.appendChild(el("div",{class:"row"},cb,fileTile(it.path),el("div",{class:"name"},it.path,(it.big||it.split)?el("span",{class:"tag"+(it.tooBig?" bad":"")+(it.split?" split":"")},tagFor(it)):null,el("small",null,fmt(it.size)+splitNote(it)+(it.tooBig?"  ·  too large to send":"")))));
     });
     var sel=items.filter(function(i){return i.checked;});
-    sumEl.textContent=sel.length+" of "+items.length+" selected, "+fmt(sel.reduce(function(s,i){return s+i.size;},0));
+    sumEl.replaceChildren(dots([sel.length+" of "+items.length+" selected",fmt(sel.reduce(function(s,i){return s+i.size;},0))]));
     planEl.replaceChildren();
     if(S.repo.loaded&&sel.length){
       var pc=previewCounts(sel,holder.dest,"merge"); planEl.appendChild(chip(pc.nw+" new","add"));
@@ -1864,7 +1904,7 @@ function exBuild(){
   });
   S.ex.root=root;
   var files=allFiles(root), total=files.reduce(function(s,f){return s+f.size;},0), info="";
-  if(files.length) info=plural(files.length,"file")+", "+fmt(total)+" ready.";
+  if(files.length) info=plural(files.length,"file")+" \u2022 "+fmt(total)+" \u2022 ready.";
   if(ignored) info+=" Ignored "+plural(ignored,"system file")+".";
   if(dupes) info+=" "+plural(dupes,"file")+" appeared twice. The later one is used.";
   if(S.ex.errors.length) info+=(info?" ":"")+S.ex.errors.join(" ");
@@ -1900,7 +1940,7 @@ function exWalk(node,depth,frag){
       cb.checked=st.all; cb.indeterminate=!st.all&&!st.none; cb.disabled=st.total===0;
       cb.onchange=function(){allFiles(k).forEach(function(f){if(!f.big)f.checked=cb.checked;});exRender();};
       var caret=el("button",{type:"button",class:"caret","aria-expanded":String(k.open),"aria-label":k.open?"Close folder":"Open folder",onclick:function(){k.open=!k.open;exRender();}},ico("chev"));
-      var name=el("div",{class:"name",onclick:function(){k.open=!k.open;exRender();},style:"cursor:pointer"},k.name,el("small",null,plural(st.count,"file")+", "+fmt(st.size)));
+      var name=el("div",{class:"name",onclick:function(){k.open=!k.open;exRender();},style:"cursor:pointer"},k.name,el("small",null,dots([plural(st.count,"file"),fmt(st.size)])));
       row.append(caret,cb,folderTile(k.name),name); frag.appendChild(row);
       if(k.open) exWalk(k,depth+1,frag);
     }else{
@@ -1927,7 +1967,7 @@ function exSummary(){
   if(!S.ex.root) return;
   var fs=allFiles(S.ex.root), sel=fs.filter(function(f){return f.checked;}), bytes=sel.reduce(function(s,f){return s+f.size;},0);
   var big=sel.filter(function(f){return f.big;}).length, nsplit=sel.filter(function(f){return f.split;}).length;
-  $("summary").textContent=sel.length+" of "+fs.length+" selected, "+fmt(bytes)+(big?", including "+big+" held back":"")+(nsplit?". "+plural(nsplit,"PDF")+(S.opts.compressPdf?" will be compressed or split":" will be split"):"");
+  $("summary").replaceChildren(dots([sel.length+" of "+fs.length+" selected",fmt(bytes),big?"including "+big+" held back":null]),document.createTextNode(nsplit?". "+plural(nsplit,"PDF")+(S.opts.compressPdf?" will be compressed or split":" will be split"):""));
   $("go").textContent=(S.ex.retry&&S.ex.retry===sel.length)?"Retry "+S.ex.retry+" left":"Extract selected";
   $("go").disabled=!sel.length||S.ex.running||S.ex.locked.some(function(l){return l.kind==="zip";});
 }

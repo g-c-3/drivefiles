@@ -175,6 +175,7 @@ with sync_playwright() as p:
     check(page.locator("#libList .row",has_text="index.html").count()>=0,"app files still listed")
     tab(page,"extract")
     check(page.locator("#fHome.on").count()==1,"floating Home shows on Extract")
+    page.wait_for_timeout(700)
     tb=page.locator("#exTitle").bounding_box(); fb=page.locator("#fHome").bounding_box()
     check(abs((tb["y"]+tb["height"]/2)-(fb["y"]+fb["height"]/2))<6,"Home is level with the Extract title")
     page.mouse.wheel(0,400); page.wait_for_timeout(300); fb2=page.locator("#fHome").bounding_box(); check(abs(fb2["y"]-fb["y"])<1,"Home stays in place when scrolling")

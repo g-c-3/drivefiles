@@ -48,7 +48,7 @@ app/            ← scripts, styles, viewers, converters, licences
 3. In the repository: Settings → Pages → *Deploy from a branch* → `main` / root.
 4. Wait a minute, then open **<https://g-c-3.github.io/githubmanager/>** and reload once.
 
-The app files show in the file list with a small **app** tag, and Delete and Move warn you if the selection includes them. If you'd rather not see them, turn off **Menu → Show app files**.
+The app files show in the file list with a small **app** tag, and Delete and Move warn you if the selection includes them. They are always shown, so you can see and protect them.
 
 > [!NOTE]
 > You can add more files to `app/` later. The app loads its pieces only when needed, so opening a PDF loads the PDF engine and nothing else. No part of it depends on an outside server.
@@ -75,10 +75,10 @@ The first screen has three things: **Add**, a **Saved** list, and **Login**.
 
 Add as many as you like. **Saved** lists them as `account/repo`, is greyed out until you save the first one, and Login stays off until then. Inside the app:
 
-- Tap the repository name at the top, or **Menu → Switch repository**, to change repository.
-- **Menu → Saved repositories** lets you tick one or several and delete them. You must type `confirm` first.
-- **Menu → Edit details** changes the open repository's name, branch, token or passcode.
-- **Reset this device** (on the first screen, and in the Menu) removes every saved repository, token and setting, and clears offline files. It also asks you to type `confirm`.
+- Tap the repository name at the top, or **Settings → Switch repository**, to change repository.
+- **Settings → Saved repositories** lets you tick one or several and delete them. You must type `confirm` first.
+- **Settings → Edit details** changes the open repository's name, branch, token or passcode.
+- **Reset this device** (on the first screen, and in Settings) removes every saved repository, token and setting, and clears offline files. It also asks you to type `confirm`.
 
 ### The passcode
 
@@ -90,13 +90,13 @@ Every saved repository has a passcode, and **you choose what it is**. There is n
 - There is **no fingerprint or face unlock**. The passcode is the only way in.
 - Repositories saved by an older version without a passcode ask you to choose one the first time you log in, and are encrypted with it from then on.
 - Honest limit: a passcode protects the token while you are logged out. While you are logged in, the token is held in the page's memory, as any web app must. A short passcode could be guessed by someone who copies your browser data, so choose longer on shared devices.
-- **Menu → Lock after no activity** sets 1, 2, 5 or 15 minutes, or never. It locks after that long without a touch or key press, or that long with the page in the background. It never locks in the middle of a running upload or extract.
+- **Settings → Auto-lock** sets 1, 2, 5 or 15 minutes, or never. It locks after that long without a touch or key press, or that long with the page in the background. It never locks in the middle of a running upload or extract.
 
 Your details never leave the device except to GitHub.
 
 ## Moving around
 
-- The Files line shows the file count and size in small grey text, with the buttons on the same line. Both shrink to fit the screen. The **⋮ menu** button is the last button on the line, right after Add files, centred under the lock button and with a soft glow. The menu closes with the **✕** beside its title. It holds Files, Extract and History, the **Light / Dark / Night** switch and the settings. The **lock** button at the top right locks Atlas straight away, with a short fade, and returns to the login screen.
+- The Files line shows the file count and size in small grey text, with the buttons on the same line. Both shrink to fit the screen. The toolbar holds Search, Refresh, New folder, New file, Extract, History and Add files; the gear (Settings) and lock are in the top bar.
 - On **Extract** and **History** a floating **Home** button sits level with the page title and stays in place while you scroll. Tap it to go to Files. Dark is the default, Light is white, and Night is pure black for OLED screens. Your choice is remembered.
 - The **Back button or gesture** works inside the app: it closes a window or the viewer, goes up a folder, or leaves a tab, instead of leaving the site. At the top of a repository, press Back twice to log out and return to the login screen. On the login screen, one Back stays put and two quick Backs leave to the page you came from. Back is refused while a job is running.
 - **Right-click is switched off** across the app, except in fields where you type (names, token, passcode, limit, the editor). This only removes the browser's menu; it doesn't protect anything.
@@ -188,12 +188,12 @@ Folders are always merged: new files go into the folder that's already there. Th
 ## More features
 
 - **Share to Atlas (Android).** Once Atlas is **installed** (Chrome menu → Install app), it appears in Android's Share list. Share files or photos to it, log in, and the *Add files* window opens with them ready. This works only on the installed app on Android, not in a normal browser tab, and I couldn't test it on a real phone, so tell me if your phone behaves differently.
-- **Shrink photos.** Switch on in *Add files* or in the Menu. JPG, PNG and WebP pictures are scaled so the longest side is 1280, 2048 or 3000 px and re-saved smaller, and only used if that makes them smaller. Photo details such as location are removed. HEIC photos aren't changed.
+- **Shrink photos.** Switch on in *Add files* or in Settings. JPG, PNG and WebP pictures are scaled so the longest side is 1280, 2048 or 3000 px and re-saved smaller, and only used if that makes them smaller. Photo details such as location are removed. HEIC photos aren't changed.
 - **Retry and resume.** If some files fail or you press Stop, the window stays open and the button becomes **Retry N left**. Only the unfinished files are sent. Files already saved are not sent again. Extract does the same. Short network drops are retried automatically.
 - **Search inside files.** Type in Search, then tap **Search in Content** (or press Enter). It reads text-type files (notes, code, CSV, JSON, HTML and similar) up to 1 MB each and shows the matching line. PDFs and Office files aren't searched.
 - **Pictures and links in Markdown.** `![](images/a.png)` and `[next](chapter2.md)` are resolved against the file's own folder. Pictures show in the preview and linked notes open in the viewer.
-- **Branches.** **Menu → Branch** lists branches, switches to one, creates a new one from the current one, and merges the current branch into another using GitHub's own merge. If the changes overlap, Atlas says so and you finish it on github.com. The branch you pick is remembered for that saved repository.
-- **Back up whole repository.** **Menu → Back up whole repository** downloads every file as a zip, with full folder paths, optionally password protected. It is built in memory, so a very large repository may not fit on a phone.
+- **Branches.** **Settings → Branch** lists branches, switches to one, creates a new one from the current one, and merges the current branch into another using GitHub's own merge. If the changes overlap, Atlas says so and you finish it on github.com. The branch you pick is remembered for that saved repository.
+- **Back up whole repository.** **Settings → Back up whole repository** downloads every file as a zip, with full folder paths, optionally password protected. It is built in memory, so a very large repository may not fit on a phone.
 - **Pinned and recent.** Select an item, tap **More → Pin to the top**, and it appears as a chip above the file list. Recently opened files appear there too. They are kept on this device only, per repository.
 - **PDF tools.** Select PDFs and tap **More**: **Join PDFs** (two or more, in the order shown), **Extract pages** (for example `1-3, 5`) and **Rotate pages** (90, 180 or 270 degrees, all pages or chosen ones, as a new file or replacing the original). Results are saved to the repository as a normal commit, so they can be undone from History.
 - **Compress large PDFs.** Switch on **Compress large PDFs first** in *Add files* or *Extract* and pick Light, Medium or Strong. A PDF over your size limit has the pictures inside scaled down and re-saved smaller. If it then fits it is saved as one file; if not, it is split into page ranges as before (using the compressed copy). It is **lossy** for pictures, text and layout stay. It works on pictures stored as JPEG or plain RGB/grey; some scanner formats (JBIG2, JPEG 2000, black-and-white CCITT) can't be recompressed in a browser, so such a PDF may not shrink enough. Large PDFs need a lot of memory on a phone, and I could only test with generated PDFs, so try a real scan and tell me how it behaves. You can also tap **More → Compress PDF** on selected PDFs to save a smaller copy, or replace the original.
@@ -202,11 +202,13 @@ Folders are always merged: new files go into the folder that's already there. Th
 
 ## Recovery backup, dates, result tabs and search listing (latest)
 
-- **Recovery backup.** Before the first change of every session (upload, extract, edit, delete, move, merge) Atlas publishes a GitHub release named `RecoveryBackup 17 Nov 2026 03:04 am` (tag `RecoveryBackup-YYYY-MM-DD-HHMMSS`) on the current branch. GitHub attaches a zip of the whole repository to it, so you can restore from it. A toast confirms it. If your token cannot create releases, Atlas shows one toast asking you to run a full backup (Menu > Back up whole repository) and carries on. Turn it off in Menu > Preferences. Tokens need **Contents: read and write**, which covers releases.
+- **Recovery backup.** Before the first change of every session (upload, extract, edit, delete, move, merge) Atlas publishes a GitHub release named `RecoveryBackup 17 Nov 2026 03:04 am` (tag `RecoveryBackup-YYYY-MM-DD-HHMMSS`) on the current branch. GitHub attaches a zip of the whole repository to it, so you can restore from it. A toast confirms it (`Backup saved in Repo Releases: RecoveryBackup 18 Nov 2026 07:28 am`). If the release cannot be made, Atlas asks before changing anything: **Back up now** cancels the change and opens the full-backup sheet; **Continue without backup** goes ahead (asked once per session). Turn it off in Settings > Preferences. Tokens need **Contents: read and write**, which covers releases.
 - **Dates.** After each size the Files list shows the date and time of the last change, like `01 Jan 2026 08:13 am`, in your local time. Git stores no file times, so Atlas reads them from the commit history in the background (newest 200 commits), caches them on the device and tops them up when the branch moves. Very old files beyond that window may show no date. Folders show their newest file's date.
 - **Extract results.** The details log shows on its own as soon as extraction starts. When it finishes, four equal tabs appear: New, Replaced, Skipped, Processed (tap again to close). Processed lists only files actually shrunk or compressed (images: Compressed; PDFs: Compressed, Split, Compressed & Split) and they also appear under New or Replaced. Split PDFs are listed by part name.
 - **Search listing.** `index.html` carries titles, description, keywords, canonical, Open Graph, JSON-LD (alternate names such as GitManager, Manager for GitHub, File Explorer for GitHub, Atlas for Git) plus `robots.txt` and `sitemap.xml`. This makes the site eligible to be found; it cannot guarantee ranking. Submit `https://g-c-3.github.io/githubmanager/` in Google Search Console and Bing Webmaster Tools to speed it up. The page is public, but it holds no repository data.
-- **Tidier chrome.** Grouped Menu with toggle switches, compact viewer header and bottom bar, tighter top spacing.
+- **Smoothness.** Pages, folders, the viewer, sheets, switches and segmented controls ease in and out instead of jumping; all of it is switched off by the system's reduced-motion setting.
+- **Toasts** show an icon, a title and an optional detail line with a countdown; tap one to close it.
+- **Tidier chrome.** Grouped Settings with toggle switches, compact viewer header and bottom bar, tighter top spacing.
 
 ## Settings, toolbar and selection (latest)
 
@@ -218,7 +220,7 @@ Folders are always merged: new files go into the folder that's already there. Th
 ## Offline and install
 
 - Atlas can be **installed** (browser menu → Install app / Add to Home screen) and its own files work offline.
-- Files from your repo are **not** kept offline unless you turn on **Menu → Keep opened files for offline use**. Those copies are stored unencrypted on the device, so leave it off on shared devices. **Clear offline files** removes them.
+- Files from your repo are **not** kept offline unless you turn on **Settings → Keep opened files for offline use**. Those copies are stored unencrypted on the device, so leave it off on shared devices. **Clear offline files** removes them.
 
 ## Limits
 
@@ -237,14 +239,14 @@ Folders are always merged: new files go into the folder that's already there. Th
 - Markdown and Word content is sanitised. HTML previews run in a locked sandbox. Pictures hosted on outside sites in Markdown are **not loaded**; pictures stored in your repository are.
 - Use a fine-grained token limited to this one repository, and revoke it if a device is lost.
 - This page is public, but it contains no secrets. Strangers see only the first screen with nothing saved.
-- **Log out** and **Reset this device** are in the menu. Atlas locks itself after the idle time you choose (default 2 minutes).
+- **Log out** and **Reset this device** are in Settings (the gear) and the lock button. Atlas locks itself after the idle time you choose (default 2 minutes).
 
 ## Troubleshooting
 
 | Message | Fix |
 |---|---|
 | "Couldn't load app/…" | The `app` folder is missing from the repo root. Extract `atlas-site.zip` again |
-| Token was rejected | Menu → Edit details, and paste a valid token |
+| Token was rejected | Settings → Edit details, and paste a valid token |
 | Repository or branch not found | Check spelling, and that the token covers this repo |
 | No permission | The token needs **Contents: Read and write** |
 | Repository is empty | Add one file in GitHub first, for example a README |
@@ -255,6 +257,8 @@ Folders are always merged: new files go into the folder that's already there. Th
 ## Credits and licences
 
 **Atlas was created by Gokul Chandar.**
+
+Atlas itself is released under the **MIT License** (see `LICENSE`). Bundled third-party components keep their own licences, listed below and in `app/licenses/`.
 
 All components are bundled; their licences are in `app/licenses/`.
 

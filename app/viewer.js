@@ -87,10 +87,12 @@ function open(path,o){
 }
 function openBlob(x){confirmDiscard(function(){load({path:x.path||x.name,name:x.name,size:x.size||0,real:false,getBlob:x.getBlob});});}
 function close(silent){
-  if(root.hidden) return;
+  if(root.hidden||root.classList.contains("vout")) return;
   var go=function(){
-    teardown();root.hidden=true;document.documentElement.classList.remove("vopen");V.item=null;
+    document.documentElement.classList.remove("vopen");V.item=null;
     if(V.nav){window.AtlasNav.drop(V.nav);V.nav=null;} V.pushed=false;
+    root.classList.add("vout"); clearTimeout(V.hideT);
+    V.hideT=setTimeout(function(){ if(!V.item){ teardown(); root.hidden=true; } root.classList.remove("vout"); },300);
   };
   if(silent){V.dirty=false;go();}else confirmDiscard(go);
 }
@@ -116,7 +118,7 @@ function setupFoot(){
 async function load(item){
   var token=++V.token;
   teardown();V.item=item;item.kind=kindOf(item.name);
-  root.hidden=false;document.documentElement.classList.add("vopen");
+  clearTimeout(V.hideT);root.classList.remove("vout");root.hidden=false;document.documentElement.classList.add("vopen");
   if(!V.nav&&window.AtlasNav){V.pushed=true;V.nav=window.AtlasNav.push(function(){ if(V.dirty){ confirmDiscard(function(){close(true);}); return false; } close(true); },"viewer");}
   titleEl.textContent=item.name;
   subEl.textContent=(item.real&&item.path.indexOf("/")>0?item.path.slice(0,item.path.lastIndexOf("/"))+"  ·  ":"")+H.fmt(item.size||0);

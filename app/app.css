@@ -743,3 +743,59 @@ input[type=text],input[type=password],input[type=number],input:not([type]),selec
 @media (min-width:700px){.layer .sheet{transition:transform .4s cubic-bezier(.22,.8,.2,1),opacity .34s ease}}
 .toast{transition:opacity .35s ease,transform .35s ease}
 @media (prefers-reduced-motion:reduce){.layer .sheet,.layer .backdrop,.tgl input[type=checkbox],.tgl input[type=checkbox]::before{transition:none}}
+
+/* ---- round 7: smooth everything ---- */
+:root{--ease:cubic-bezier(.22,.8,.2,1)}
+.btn,.tb,.ibtn,.cbtn,.xbtn,.pinchip,.seg button,.menutabs button,.rtabs button,.actionbar button,.mrow.btn,.row,.chip,.tag{transition:background-color .26s ease,color .26s ease,border-color .26s ease,box-shadow .3s ease,opacity .26s ease,transform .2s var(--ease)}
+.btn:active,.tb:active,.ibtn:active,.cbtn:active,.xbtn:active,.pinchip:active,.actionbar button:active{transform:scale(.96)}
+.btn:disabled{transition:opacity .3s ease}
+.row:active{transform:none}
+.row{transition:background-color .25s ease,box-shadow .25s ease}
+/* sliding highlight inside segmented controls */
+.seg{position:relative;isolation:isolate}
+.segpill{position:absolute;left:0;top:0;z-index:-1;pointer-events:none;background:var(--grad);box-shadow:0 4px 16px -4px var(--glow);opacity:0;transition:transform .36s var(--ease),width .36s var(--ease),height .3s var(--ease),opacity .2s ease}
+.seg.sp .segpill{opacity:1}
+.seg.sp button[aria-pressed=true]{background:transparent;box-shadow:none;color:#fff}
+/* pages and screens ease in instead of jumping */
+#tab-files:not([hidden]),#tab-extract:not([hidden]),#tab-history:not([hidden]){animation:tabIn .4s var(--ease) both}
+#s-home:not([hidden]),#s-setup:not([hidden]),#shell:not([hidden]){animation:screenIn .45s var(--ease) both}
+@keyframes tabIn{from{opacity:0}to{opacity:1}}
+@keyframes screenIn{from{opacity:0;transform:scale(.985)}to{opacity:1;transform:none}}
+#libList.go-in{animation:goIn .36s var(--ease) both}
+#libList.go-out{animation:goOut .36s var(--ease) both}
+@keyframes goIn{from{opacity:0;transform:translateX(18px)}to{opacity:1;transform:none}}
+@keyframes goOut{from{opacity:0;transform:translateX(-18px)}to{opacity:1;transform:none}}
+/* viewer slides in and out */
+.viewer:not([hidden]){animation:vIn .4s var(--ease) both}
+.viewer.vout{animation:vOut .3s ease-in both;pointer-events:none}
+@keyframes vIn{from{opacity:0;transform:translateY(22px) scale(.985)}to{opacity:1;transform:none}}
+@keyframes vOut{from{opacity:1;transform:none}to{opacity:0;transform:translateY(16px) scale(.985)}}
+/* selection bar, toasts, floating buttons */
+.actionbar{transition:transform .38s var(--ease),opacity .3s ease}
+.toast{animation:toastin .42s var(--ease) both}
+#fHome{transition:opacity .3s ease,transform .38s var(--ease),visibility 0s linear .3s}
+.tgl input[type=checkbox],.tgl input[type=checkbox]::before{transition-duration:.34s}
+input[type=checkbox]{transition:background-color .22s ease,border-color .22s ease,box-shadow .22s ease}
+details>summary{transition:color .2s}
+@media (prefers-reduced-motion:reduce){
+  #tab-files,#tab-extract,#tab-history,#s-home,#s-setup,#shell,#libList,.viewer,.toast{animation:none!important}
+  .segpill{transition:none}
+}
+.pane,#shell{overflow-x:clip}
+
+/* ---- toast: icon, title, optional detail, countdown line ---- */
+#toasts{top:calc(60px + env(safe-area-inset-top));gap:8px}
+.toast{position:relative;display:flex;align-items:center;gap:11px;padding:10px 16px 12px 11px;min-width:min(300px,88vw);max-width:min(440px,92vw);border-radius:16px;font-weight:600;font-size:.9rem;line-height:1.3;overflow:hidden;pointer-events:auto;cursor:pointer;
+  background:var(--glass2);-webkit-backdrop-filter:blur(18px) saturate(1.5);backdrop-filter:blur(18px) saturate(1.5);border:1px solid var(--line);box-shadow:0 14px 34px -12px rgba(0,0,0,.45),0 0 26px -10px var(--glow)}
+.toast .tic{flex:none;width:30px;height:30px;border-radius:50%;display:grid;place-items:center;background:var(--grad);color:#fff;box-shadow:0 4px 12px -3px var(--glow)}
+.toast .tic .ico,.toast .tic svg{width:16px;height:16px;display:block}
+.toast .ttx{min-width:0;display:grid;gap:1px}
+.toast .ttx b{font-weight:650;overflow-wrap:anywhere}
+.toast .ttx small{font-weight:500;font-size:.78rem;color:var(--muted);overflow-wrap:anywhere}
+.toast .tbar{position:absolute;left:0;bottom:0;height:2.5px;width:100%;background:var(--grad);transform-origin:left;animation:tcount var(--dur,3400ms) linear forwards;opacity:.85}
+@keyframes tcount{to{transform:scaleX(0)}}
+.toast.bad{border-color:rgba(255,90,120,.55);box-shadow:0 14px 34px -12px rgba(0,0,0,.45),0 0 26px -10px rgba(255,90,120,.55)}
+.toast.bad .tic{background:linear-gradient(135deg,#ff5d7a,#ff8a5c);box-shadow:0 4px 12px -3px rgba(255,90,120,.6)}
+.toast.bad .tbar{background:linear-gradient(90deg,#ff5d7a,#ff8a5c)}
+@media (prefers-reduced-motion:reduce){.toast .tbar{animation:none;display:none}}
+.toast{background:color-mix(in srgb,var(--bg) 90%,transparent)}
