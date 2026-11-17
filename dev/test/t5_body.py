@@ -5,7 +5,12 @@ def check(c,m):
 def toast(page,txt,t=60000): page.wait_for_function("t=>Array.from(document.querySelectorAll('.toast')).some(e=>e.textContent.includes(t))",arg=txt,timeout=t)
 def tab(page,n):
     if page.locator(f"#sideNav [data-tab={n}]").first.is_visible(): page.locator(f"#sideNav [data-tab={n}]").first.click(); return
-    OPENMENU(); page.locator(".layer.open .menutabs button",has_text=n.capitalize()).click(); page.wait_for_timeout(350)
+    if n=="files":
+        if page.locator("#fHome").is_visible(): page.click("#fHome")
+        page.wait_for_timeout(450); return
+    if not page.locator("#toolExtract").is_visible():
+        page.click("#fHome"); page.wait_for_selector("#tab-files:not([hidden])"); page.wait_for_timeout(450)
+    page.click("#toolExtract" if n=="extract" else "#toolHistory"); page.wait_for_timeout(450)
 def rows(page): return page.locator("#libList .row .name").all_inner_texts()
 def sheet_click(page,label):
     l=page.locator(".layer.open .foot .btn",has_text=label)

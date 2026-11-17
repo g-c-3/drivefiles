@@ -208,6 +208,13 @@ Folders are always merged: new files go into the folder that's already there. Th
 - **Search listing.** `index.html` carries titles, description, keywords, canonical, Open Graph, JSON-LD (alternate names such as GitManager, Manager for GitHub, File Explorer for GitHub, Atlas for Git) plus `robots.txt` and `sitemap.xml`. This makes the site eligible to be found; it cannot guarantee ranking. Submit `https://g-c-3.github.io/githubmanager/` in Google Search Console and Bing Webmaster Tools to speed it up. The page is public, but it holds no repository data.
 - **Tidier chrome.** Grouped Menu with toggle switches, compact viewer header and bottom bar, tighter top spacing.
 
+## Settings, toolbar and selection (latest)
+
+- **Settings.** The gear in the top bar (next to the lock) opens Settings: theme, auto-lock, shrink photos, wrap long lines (on by default), keep selection between folders (off by default), offline files, recovery backup, branch, repository backup, switching and editing repositories, and Reset this device. The old Menu and its Files/Extract/History tabs are gone.
+- **Toolbar.** Search, Refresh, New folder, New file, **Extract**, **History**, Add files. Sort moved to the Select all row and can now sort by Date. On Extract and History the floating Home button returns to Files.
+- **Tapping a row** always opens the folder or file; only the checkbox selects. With "Keep selection between folders" off, selections are cleared when you go to another folder.
+- Controls are smaller and tighter throughout.
+
 ## Offline and install
 
 - Atlas can be **installed** (browser menu → Install app / Add to Home screen) and its own files work offline.

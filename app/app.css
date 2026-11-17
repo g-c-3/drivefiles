@@ -659,3 +659,48 @@ input[type=checkbox]{}
 .viewer:has(.vfoot:not([hidden])) .vbody{padding-bottom:68px}
 @keyframes vfin{from{opacity:0;transform:translate(-50%,10px)}to{opacity:1;transform:translate(-50%,0)}}
 @media (prefers-reduced-motion:reduce){.vfoot{animation:none}}
+
+/* ---- compact, sharper controls (global) ---- */
+.btn{min-height:38px;padding:0 15px;border-radius:11px;font-size:.9rem;font-weight:620;gap:7px}
+.btn.sm{min-height:32px;padding:0 11px;font-size:.84rem;border-radius:9px}
+.btn svg,.btn .ico{width:17px;height:17px}
+.ibtn{width:36px;height:36px;border-radius:11px}
+.ibtn svg,.ibtn .ico{width:19px;height:19px}
+input[type=text],input[type=password],input[type=number],input:not([type]),select{min-height:40px;padding:0 12px;border-radius:11px;font-size:.93rem}
+.pw .ibtn{width:36px;height:36px;top:2px;right:3px}
+.pw input{padding-right:44px}
+.check{min-height:34px;gap:10px;font-size:.93rem}
+.seg{padding:2px;border-radius:11px}
+.seg button{min-height:34px;font-size:.86rem;border-radius:9px}
+.tile{width:38px;height:38px;border-radius:12px}
+.row{min-height:48px;padding:4px 10px 4px 8px;gap:9px}
+.selall{min-height:34px;font-size:.84rem}
+.actionbar button{min-height:38px;border-radius:11px;font-size:.88rem;padding:0 10px}
+.frow{min-height:40px}
+.tb{border-radius:10px}
+@media (pointer:coarse){ .pinchip{min-height:30px} }
+.sheet .foot{gap:8px;padding-top:6px}
+.sheet h2,.sheet .shead h2{font-size:1.15rem}
+.field>span{font-size:.84rem}
+.hint,.muted.small{font-size:.8rem}
+.mark{width:50px;height:50px;border-radius:15px}
+/* settings + sort in rows */
+#menuBtn{color:var(--muted);transition:color .2s,transform .35s cubic-bezier(.3,1.2,.4,1),background .15s}
+#menuBtn:hover{color:var(--accent)}
+#menuBtn:active{transform:rotate(60deg) scale(.92)}
+.titlebar .ibtn{width:34px;height:34px}
+.cbtn{min-height:28px;padding:0 10px;border-radius:99px;font-size:.78rem;font-weight:620;display:inline-flex;align-items:center;gap:5px;border:1px solid var(--line);background:var(--glass2);color:var(--ink)}
+#sortBtn{margin-left:auto}
+#sortBtn .ico,#sortBtn svg{width:14px;height:14px}
+.selall{gap:8px}
+#toolExtract .ico,#toolHistory .ico{display:grid;place-items:center}
+.tools #toolExtract,.tools #toolHistory{color:var(--accent)}
+.mrow.btn{min-height:44px}
+.mrow .mi{width:30px;height:30px;border-radius:9px}
+.mset .seg button{min-height:30px}
+.tgl input[type=checkbox]{width:38px;height:22px}
+.tgl input[type=checkbox]::before{width:16px;height:16px}
+.tgl input[type=checkbox]:checked::before{transform:translateX(16px)}
+.selall{justify-content:flex-start}
+#contentBtn{margin-left:0;border-color:var(--accent);color:var(--accent);height:28px}
+#sortBtn{height:26px;padding:0 9px;font-size:.76rem}

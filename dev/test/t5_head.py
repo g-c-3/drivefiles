@@ -153,6 +153,4 @@ def LOGIN(pw=None):
     page.wait_for_selector("#libList .row")
 
 def OPENMENU():
-    if not page.locator("#menuBtn").is_visible():
-        page.click("#fHome"); page.wait_for_selector("#tab-files:not([hidden])"); page.wait_for_timeout(450)
     page.click("#menuBtn")

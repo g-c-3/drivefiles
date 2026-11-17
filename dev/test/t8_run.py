@@ -4,6 +4,10 @@ BASE0=os.path.dirname(os.path.abspath(__file__))
 exec(open(BASE0+"/t5_head.py").read())
 import numpy as np
 from PIL import Image
+def tab(page,n):
+    if not page.locator("#toolExtract").is_visible():
+        page.click("#fHome"); page.wait_for_selector("#tab-files:not([hidden])"); page.wait_for_timeout(450)
+    page.click("#toolExtract" if n=="extract" else "#toolHistory"); page.wait_for_timeout(450)
 fails=[]
 def check(c,m):
     print(("PASS " if c else "FAIL ")+m, flush=True)
@@ -45,7 +49,7 @@ with sync_playwright() as p:
     check(len(releases)==0,"no backup made just by browsing")
     # ---- extract + result tabs, with the recovery backup before the first change ----
     page.click("#fHome") if False else None
-    OPENMENU(); page.locator(".layer.open .menutabs button",has_text="Extract").first.click(); page.wait_for_timeout(500)
+    tab(page,"extract")
     page.set_input_files("#inArch","/tmp/r1.zip"); page.wait_for_selector("#tree .row"); page.wait_for_timeout(500)
     page.click("#go"); page.wait_for_selector("#resTabs:not([hidden])",timeout=90000)
     check(len(releases)==1 and re.match(r"RecoveryBackup-\d{4}-\d\d-\d\d-\d{6}$",releases[0]["tag_name"]) is not None,"recovery backup release made before the first change: "+str([r["tag_name"] for r in releases]))
@@ -72,7 +76,7 @@ with sync_playwright() as p:
     page.evaluate("localStorage.setItem('a_prefs',JSON.stringify({filePolicy:'replace',limit:3,compressPdf:true,compressLevel:'strong',splitPdf:true}))")
     page.reload(); page.wait_for_selector("#s-home:not([hidden])")
     page.click("#homeLogin"); page.wait_for_selector(".layer.open input[type=password]"); page.fill(".layer.open input[type=password]","a"); page.keyboard.press("Enter"); page.wait_for_selector("#libList .row")
-    OPENMENU(); page.locator(".layer.open .menutabs button",has_text="Extract").first.click(); page.wait_for_timeout(500)
+    tab(page,"extract")
     page.set_input_files("#inArch","/tmp/r2.zip"); page.wait_for_selector("#tree .row"); page.wait_for_timeout(500)
     page.click("#go"); page.wait_for_selector("#resTabs:not([hidden])",timeout=170000)
     check(len(releases)==2,"a new session makes its own backup (2 total), not one per file: %d"%len(releases))

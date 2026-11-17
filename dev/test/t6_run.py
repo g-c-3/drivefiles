@@ -4,6 +4,10 @@ BASE0=os.path.dirname(os.path.abspath(__file__))
 exec(open(BASE0+"/t5_head.py").read())
 from PIL import Image
 import pypdf
+def tab(page,n):
+    if not page.locator("#toolExtract").is_visible():
+        page.click("#fHome"); page.wait_for_selector("#tab-files:not([hidden])"); page.wait_for_timeout(450)
+    page.click("#toolExtract" if n=="extract" else "#toolHistory"); page.wait_for_timeout(450)
 fails=[]
 def check(c,m):
     print(("PASS " if c else "FAIL ")+m, flush=True)
@@ -161,15 +165,15 @@ with sync_playwright() as p:
     page.wait_for_selector("#libList .row")
     box=page.locator("#menuBtn").bounding_box(); ab=page.locator("#addFiles").bounding_box()
     lk=page.locator("#lockBtn").bounding_box()
-    check(abs((box["x"]+box["width"]/2)-(lk["x"]+lk["width"]/2))<1.5 and box["x"]>ab["x"],"menu dots are centred under the lock button and after Add files")
+    check(box["x"]<lk["x"] and abs(box["y"]-lk["y"])<2,"settings gear sits beside the lock button in the top bar")
     check(page.locator("#libStat").inner_text().strip()!="" and page.locator(".pagehead .page-title").count()==0,"file count replaces the big Files title")
     check(page.locator(".tile.fold").first.evaluate("e=>getComputedStyle(e).boxShadow").count("rgba")>=2,"folders glow")
-    check(page.locator(".titlebar #menuBtn").count()==0 and page.locator(".titlebar #lockBtn").count()==1,"lock button replaced the dots in the top bar")
+    check(page.locator(".titlebar #menuBtn").count()==1 and page.locator(".titlebar #lockBtn").count()==1,"settings and lock buttons are in the top bar")
     OPENMENU(); page.wait_for_selector(".layer.open")
     check("Show app files" not in page.inner_text(".layer.open"),"Show app files is gone")
     sheet_click(page,"Close"); page.wait_for_timeout(400)
     check(page.locator("#libList .row",has_text="index.html").count()>=0,"app files still listed")
-    OPENMENU(); page.locator(".layer.open .menutabs button, .layer.open [data-tab]",has_text="Extract").first.click(); page.wait_for_timeout(600)
+    tab(page,"extract")
     check(page.locator("#fHome.on").count()==1,"floating Home shows on Extract")
     tb=page.locator("#exTitle").bounding_box(); fb=page.locator("#fHome").bounding_box()
     check(abs((tb["y"]+tb["height"]/2)-(fb["y"]+fb["height"]/2))<6,"Home is level with the Extract title")

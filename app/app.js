@@ -28,6 +28,7 @@ var ICONS={
  lock:'<rect x="5" y="11" width="14" height="9" rx="2.5"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
  search:'<circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/>',
  refresh:'<path d="M20 11a8 8 0 0 0-14.5-3.5"/><path d="M5 3.5v4h4"/><path d="M4 13a8 8 0 0 0 14.5 3.5"/><path d="M19 20.5v-4h-4"/>',
+ gear:'<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>',
  dots:'<circle cx="12" cy="5" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="12" cy="19" r="1.7"/>',
  x:'<path d="M6 6l12 12M18 6 6 18"/>',
  chev:'<path d="m9 6 6 6-6 6"/>',
@@ -125,7 +126,7 @@ var S={
   ex:{names:[],readers:[],items:[],errors:[],root:null,locked:[],dest:"",destTouched:false,running:false,cancel:false,opening:false},
   lib:{cwd:"",sel:new Set(),q:"",exp:new Set(),hits:null,busy:0},
   act:{loaded:false,list:[]},
-  opts:{filePolicy:"skip",folderPolicy:"merge",strip:false,limit:50,splitPdf:true,forceSame:false,theme:"dark",sortKey:"name",sortDir:"asc",hideApp:false,offline:false,recovery:true,autoLock:2,shrink:false,shrinkMax:2048,compressPdf:false,compressLevel:"medium"}
+  opts:{filePolicy:"skip",folderPolicy:"merge",strip:false,limit:50,splitPdf:true,forceSame:false,theme:"dark",sortKey:"name",sortDir:"asc",hideApp:false,offline:false,recovery:true,wrap:true,keepSel:false,autoLock:2,shrink:false,shrinkMax:2048,compressPdf:false,compressLevel:"medium"}
 };
 var VK="a_vault", PK="a_prefs", lastWrite=0, hiddenAt=0;
 
@@ -509,12 +510,12 @@ async function branchSheet(){
     }
     mbtn.disabled=false;
   }},"Merge");
-  box.replaceChildren(
+  box.replaceChildren.apply(box,[
     el("div",{class:"field",style:"margin-top:0"},el("span",null,"Switch to"),list),
     el("div",{class:"field"},el("span",null,"New branch from "+cur),el("div",{class:"destrow"},nin,cbtn)),
     others.length?el("div",{class:"field"},el("span",null,"Merge "+cur+" into"),el("div",{class:"destrow"},tsel,mbtn)):null,
     el("p",{class:"hint"},"Switching changes which branch Atlas shows and saves to. Merging uses GitHub's own merge, and if the changes overlap it tells you instead of guessing. Every change stays in History."),
-    st,err);
+    st,err].filter(Boolean));
 }
 function backupSheet(){
   if(!S.repo.loaded){ toast("Wait for the files to load first.",true); return; }
@@ -731,19 +732,8 @@ function setTabRaw(name){
   if(name==="extract"){ if(!S.ex.destTouched) S.ex.dest=S.lib.cwd; paintExDest(); upPreview(); }
   if(name==="history"&&!S.act.loaded) loadActivity();
   updateActionbar(); $("pane").scrollTop=0; window.scrollTo(0,0);
-  placeHome(); alignDots();
+  placeHome();
 }
-/* keep the three dots centred under the lock button without moving the other buttons */
-function alignDots(){
-  var m=$("menuBtn"), l=$("lockBtn"); if(!m||!l||S.tab!=="files") return;
-  requestAnimationFrame(function(){
-    m.style.transition="none"; m.style.transform="none"; var a=m.getBoundingClientRect(), b=l.getBoundingClientRect();
-    if(a.width&&b.width) m.style.transform="translateX("+((b.left+b.width/2)-(a.left+a.width/2)).toFixed(1)+"px)";
-  });
-}
-window.addEventListener("resize",alignDots);
-if(window.ResizeObserver){ new ResizeObserver(function(){alignDots();}).observe(document.querySelector(".pagehead")); }
-setTimeout(alignDots,600);
 /* floating Home button on Extract and History: sits level with the page title and stays put while the page scrolls */
 var homeY=null;
 function placeHome(){
@@ -989,6 +979,7 @@ function goDir(path){
   goDirRaw(path);
 }
 function goDirRaw(path){
+  if(path!==S.lib.cwd&&!S.opts.keepSel&&S.lib.sel.size) S.lib.sel.clear();
   S.lib.cwd=path; S.lib.q=""; $("libSearch").value="";
   var parts=path?path.split("/"):[], acc="";
   parts.forEach(function(p){acc=joinPath(acc,p);S.lib.exp.add(acc);});
@@ -1085,7 +1076,7 @@ function renderLibrary(){
     var where=q&&basename(x.path)!==x.path?x.path.slice(0,x.path.length-basename(x.path).length-1)+"  ·  "+sub:sub;
     var row=el("div",{class:"row"+(x.dir?" nav":"")+(on?" sel":"")},cb,
       x.dir?folderTile(basename(x.path)):fileTile(basename(x.path)),
-      el("div",{class:"name"},shown,isAppPath(x.path)?el("span",{class:"tag app",title:"Part of this app"},"app"):null,el("small",null,where,dl?el("span",{class:"dt"}," · "+dl):null),x.snip?el("small",{class:"snip"},x.snip):null),
+      el("div",{class:"name"},shown,isAppPath(x.path)?el("span",{class:"tag app",title:"Part of this app"},"app"):null,el("small",null,(q&&basename(x.path)!==x.path)?x.path.slice(0,x.path.length-basename(x.path).length-1)+"  ·  ":null,el("span",{class:"dt"},sub),dl?el("span",{class:"dt"}," · "+dl):null),x.snip?el("small",{class:"snip"},x.snip):null),
       x.dir?el("span",{class:"muted"},ico("chev")):null);
     row.addEventListener("click",function(e){
       if(e.target===cb) return;
@@ -2081,15 +2072,17 @@ function sortCmp(a,b){
   if(a.dir!==b.dir) return a.dir?-1:1;
   var dir=S.opts.sortDir==="desc"?-1:1, an=a.name||basename(a.path), bn=b.name||basename(b.path), r=0;
   if(S.opts.sortKey==="size") r=(a.size||0)-(b.size||0);
+  else if(S.opts.sortKey==="date") r=dateOf(a.path,a.dir)-dateOf(b.path,b.dir);
   else if(S.opts.sortKey==="type") r=extOf(an).localeCompare(extOf(bn));
   if(!r) r=an.localeCompare(bn,undefined,{numeric:true});
   return r*dir;
 }
-$("sortBtn").innerHTML=svg("sort");
+function paintSort(){ var k={name:"Name",size:"Size",type:"Type",date:"Date"}[S.opts.sortKey]||"Name"; $("sortBtn").replaceChildren(ico("sort"),document.createTextNode(k+(S.opts.sortDir==="desc"?" ↓":" ↑"))); }
+paintSort();
 $("sortBtn").onclick=function(){
   var content=el("div",null,
-    el("div",{class:"field",style:"margin-top:0"},el("span",null,"Sort by"),seg([["name","Name"],["size","Size"],["type","Type"]],S.opts.sortKey,function(v){S.opts.sortKey=v;savePrefs();renderLibrary();})),
-    el("div",{class:"field"},el("span",null,"Order"),seg([["asc","Ascending"],["desc","Descending"]],S.opts.sortDir,function(v){S.opts.sortDir=v;savePrefs();renderLibrary();})));
+    el("div",{class:"field",style:"margin-top:0"},el("span",null,"Sort by"),seg([["name","Name"],["size","Size"],["type","Type"],["date","Date"]],S.opts.sortKey,function(v){S.opts.sortKey=v;savePrefs();paintSort();renderLibrary();})),
+    el("div",{class:"field"},el("span",null,"Order"),seg([["asc","Ascending"],["desc","Descending"]],S.opts.sortDir,function(v){S.opts.sortDir=v;savePrefs();paintSort();renderLibrary();})));
   openSheet({title:"Sort",content:content,actions:[{label:"Done",kind:"primary"}]});
 };
 
@@ -2277,7 +2270,10 @@ document.addEventListener("contextmenu",function(e){
   }
   if(!ok) e.preventDefault();
 },true);
-$("menuBtn").innerHTML=svg("dots");
+$("menuBtn").innerHTML=svg("gear");
+$("toolExtract").append(ico("archive")); $("toolHistory").append(ico("clock"));
+$("toolExtract").onclick=function(){setTab("extract");};
+$("toolHistory").onclick=function(){setTab("history");};
 $("lockBtn").innerHTML=svg("lock");
 $("lockBtn").addEventListener("click",function(){
   if(S.ex.running||uploadBusy){ toast("A job is still running. Stop it first, or wait for it to finish.",true); return; }
@@ -2286,21 +2282,19 @@ $("lockBtn").addEventListener("click",function(){
   setTimeout(function(){ lockNow(); sh.classList.remove("locking"); ov.classList.add("out"); setTimeout(function(){ov.remove();},380); },340);
 });
 $("menuBtn").addEventListener("click",function(){
-  var tabs=el("div",{class:"menutabs"},TABS.map(function(t){
-    return el("button",{type:"button","aria-current":String(S.tab===t[0]),onclick:function(){closeAllSheets();setTab(t[0]);}},ico(t[2]),t[1]);
-  }));
   function grp(title){ var g=el("section",{class:"mgrp"}); if(title) g.appendChild(el("h3",null,title)); for(var i=1;i<arguments.length;i++) if(arguments[i]) g.appendChild(arguments[i]); return g; }
   function mrow(icon,title,sub,fn,danger){
     return el("button",{class:"btn mrow"+(danger?" danger-row":""),type:"button",onclick:fn},el("span",{class:"mi"},ico(icon)),el("span",{class:"mt"},el("b",null,title),sub?el("small",null,sub):null),el("span",{class:"mc"},ico("chev")));
   }
   function pick(fn){ return function(){closeAllSheets();fn();}; }
   var list=el("div",{class:"menu"},
-    tabs,
     grp("Display",
       el("div",{class:"mset"},el("span",null,"Theme"),seg([["light","Light"],["dark","Dark"],["night","Night"]],S.opts.theme||"dark",function(v){applyTheme(v);})),
       el("div",{class:"mset"},el("span",null,"Auto-lock"),seg([["1","1m"],["2","2m"],["5","5m"],["15","15m"],["0","Off"]],String(S.opts.autoLock),function(v){S.opts.autoLock=+v;savePrefs();bump();}))),
     grp("Preferences",
       shrinkControls(),
+      switchRow("Wrap long lines in files",!!S.opts.wrap,function(v){S.opts.wrap=v;savePrefs();},"Applies to text and code you open. You can still switch it per file."),
+      switchRow("Keep selection between folders",!!S.opts.keepSel,function(v){S.opts.keepSel=v;savePrefs();if(!v){S.lib.sel.clear();renderLibrary();}},"Off: selected items are cleared as soon as you go to another folder."),
       switchRow("Keep opened files for offline use",!!S.opts.offline,function(v){S.opts.offline=v;savePrefs();if(!v)clearOffline();},"Saves opened files on this device, unencrypted. Turn off on a shared device."),
       switchRow("Recovery backup before changes",!!S.opts.recovery,function(v){S.opts.recovery=v;savePrefs();},"Before the first change of each session, publishes a RecoveryBackup release of the whole repo.")),
     grp("Repository",
@@ -2314,7 +2308,7 @@ $("menuBtn").addEventListener("click",function(){
       mrow("lock","Log out","Lock Atlas now",pick(lockNow)),
       mrow("trash","Clear offline files","Remove files saved for offline use",async function(){await clearOffline();toast("Offline files cleared");}),
       mrow("undo","Reset this device","Forget every saved repository",pick(resetDeviceSheet),true)));
-  openSheet({title:"Menu",content:el("div",null,list,el("p",{class:"credit"},"Created by Gokul Chandar")),noFooter:true,closeX:true,actions:[]});
+  openSheet({title:"Settings",content:el("div",null,list,el("p",{class:"credit"},"Created by Gokul Chandar")),noFooter:true,closeX:true,actions:[]});
 });
 if("serviceWorker" in navigator&&/^https?:/.test(location.protocol)){ window.addEventListener("load",function(){navigator.serviceWorker.register("sw.js").catch(function(){});}); }
 

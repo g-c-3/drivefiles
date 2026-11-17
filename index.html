@@ -80,6 +80,7 @@
     <header class="titlebar">
       <div class="brand"><span class="mk" data-ico="mark"></span><span class="grad-text">Atlas</span></div>
       <button type="button" class="conn" id="connBtn" title="Switch repository" aria-label="Switch repository"><i class="dot" id="connDot"></i><span class="t" id="connName"></span></button>
+      <button class="ibtn" id="menuBtn" type="button" aria-label="Settings" title="Settings"></button>
       <button class="ibtn" id="lockBtn" type="button" aria-label="Lock now" title="Lock now"></button>
     </header>
 
@@ -100,11 +101,11 @@
             <div class="tools" role="toolbar" aria-label="File actions">
               <button class="tb" id="searchBtn" type="button" aria-expanded="false" aria-controls="searchWrap"></button>
               <button class="tb" id="libRefresh" type="button"></button>
-              <button class="tb" id="sortBtn" type="button"></button>
               <button class="tb" id="newFolder" type="button"></button>
               <button class="tb" id="newFile" type="button"></button>
+              <button class="tb" id="toolExtract" type="button" aria-label="Extract archives" title="Extract"></button>
+              <button class="tb" id="toolHistory" type="button" aria-label="History" title="History"></button>
               <button class="tb primary" id="addFiles" type="button"></button>
-              <button class="tb" id="menuBtn" type="button" aria-label="Menu" title="Menu"></button>
             </div>
           </div>
           <div class="searchwrap" id="searchWrap" inert>
@@ -112,7 +113,7 @@
           </div>
           <div class="pinstrip" id="pinStrip" hidden></div>
           <div class="pathbar" id="libCrumbs"></div>
-          <div class="selall" id="selAllRow" hidden><label class="selallk" id="selAllLbl"><input type="checkbox" id="selAllBox"> <span>Select all</span></label><button type="button" class="cbtn" id="contentBtn" hidden>Search in Content</button></div>
+          <div class="selall" id="selAllRow" hidden><label class="selallk" id="selAllLbl"><input type="checkbox" id="selAllBox"> <span>Select all</span></label><button type="button" class="cbtn" id="contentBtn" hidden>Search in Content</button><button type="button" class="cbtn" id="sortBtn" aria-label="Sort"></button></div>
           <div class="list" id="libList"></div>
           <input type="file" id="inFiles" multiple hidden>
         </section>
