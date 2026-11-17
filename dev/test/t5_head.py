@@ -1,3 +1,4 @@
+import os
 import base64, hashlib, http.server, json, os, re, socketserver, sys, threading, zipfile
 from playwright.sync_api import sync_playwright
 
@@ -27,7 +28,7 @@ threading.Thread(target=srv.serve_forever, daemon=True).start()
 blob_size = {}; blob_data = {}
 def add_blob(b): s = gsha(b); blob_size[s] = len(b); blob_data[s] = b; return s
 snaps, commits, ctr = {}, {}, {"t": 0, "c": 0}
-FX = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "fx") + "/"
+FX = os.path.join(os.path.dirname(os.path.abspath(__file__)),"fx")+"/"
 def fx(n): return open(FX + n, "rb").read()
 MD = b"# Hello Atlas\n\nSee ![fig](fig.png) and [data](data.json) and [web](https://example.com).\n\n```python\nprint('hi')\n```\n\n| a | b |\n|---|---|\n| 1 | 2 |\n\n<script>window.__xss=1</script>\n"
 PY = b"def hello():\n    return 'world'\n"
@@ -59,6 +60,8 @@ commits["c0"] = {"tree": "t0", "parents": [], "msg": "Initial", "date": "2026-11
 head = {"sha": "c0"}
 heads = {"main": head}   # branch name -> {"sha"}
 merges = []
+releases = []
+REL = {"fail": False}
 CORS = {"access-control-allow-origin": "*", "access-control-allow-headers": "*",
         "access-control-allow-methods": "GET,POST,PATCH,OPTIONS", "access-control-expose-headers": "*"}
 reqlog = []
@@ -102,6 +105,16 @@ def handler(route, request):
             out.append({"sha": s, "commit": {"message": c["msg"], "author": {"date": c["date"]}}, "parents": [{"sha": x} for x in c["parents"]]})
             s = c["parents"][0] if c["parents"] else None
         return ok(out)
+    if request.method == "POST" and path == R + "/releases":
+        if REL["fail"]: return ok({"message": "Resource not accessible by personal access token"}, 403)
+        releases.append(body); return ok({"id": len(releases), "tag_name": body["tag_name"]}, 201)
+    mcd = re.match(R + r"/commits/(\w+)(\?.*)?$", path)
+    if request.method == "GET" and mcd:
+        cid = mcd.group(1); c = commits[cid]; new = snaps[c["tree"]]
+        old = snaps[commits[c["parents"][0]]["tree"]] if c["parents"] else {}
+        fl = [{"filename": p, "status": "added" if p not in old else "modified"} for p, v in new.items() if p not in old or old[p]["sha"] != v["sha"]]
+        fl += [{"filename": p, "status": "removed"} for p in old if p not in new]
+        return ok({"sha": cid, "commit": {"author": {"date": c["date"]}, "committer": {"date": c["date"]}}, "files": fl})
     mc = re.match(R + r"/contents/(.+?)\?ref=(.+)$", path)
     if request.method == "GET" and mc:
         from urllib.parse import unquote

@@ -130,5 +130,70 @@ async function rotate(blob,idx,deg){
   for(i=0;i<idx.length;i++){ var pg=pages[idx[i]]; pg.setRotation(P.degrees(((pg.getRotation().angle+deg)%360+360)%360)); }
   return new Blob([await src.save({useObjectStreams:true})],{type:"application/pdf"});
 }
-window.AtlasPdf={split:split,merge:merge,planMerge:planMerge,partName:partName,parsePart:parsePart,parseRanges:parseRanges,pageCount:pageCount,extract:extract,rotate:rotate};
+/* Compress: shrink the pictures inside a PDF (the bulk of any large scan). JPEG pictures and plain 8-bit RGB/grey
+   pictures are scaled down and re-saved as JPEG. Everything else is left exactly as it was. */
+var LEVELS={light:{side:2600,q:0.78},medium:{side:2000,q:0.62},strong:{side:1500,q:0.45}};
+function nameOf2(v){ var P=window.PDFLib; return v&&P&&v instanceof P.PDFName?String(v.asString()).replace(/^\//,""):""; }
+function numOf(v){ return v&&typeof v.asNumber==="function"?v.asNumber():(v&&typeof v.value==="function"?v.value():NaN); }
+async function toJpeg(src,w,h,q){
+  var cv=document.createElement("canvas"); cv.width=w; cv.height=h; var cx=cv.getContext("2d");
+  cx.fillStyle="#fff"; cx.fillRect(0,0,w,h); cx.drawImage(src,0,0,w,h);
+  var out=await new Promise(function(res){cv.toBlob(res,"image/jpeg",q);}); cv.width=cv.height=0;
+  return out?new Uint8Array(await out.arrayBuffer()):null;
+}
+async function compress(blob,level,o){
+  o=o||{}; var P=lib(), L=LEVELS[level]||LEVELS.medium, doc=await openPdf(blob), ctx=doc.context;
+  var objs=ctx.enumerateIndirectObjects(), list=[], i, k;
+  for(i=0;i<objs.length;i++){
+    var ref=objs[i][0], ob=objs[i][1];
+    if(!(ob instanceof P.PDFRawStream)) continue;
+    var d=ob.dict; if(nameOf2(d.get(P.PDFName.of("Subtype")))!=="Image") continue;
+    list.push([ref,ob]);
+  }
+  var changed=0, saved=0, skipped=0;
+  for(k=0;k<list.length;k++){
+    if(o.cancelled&&o.cancelled()) return null;
+    if(o.status) o.status("Compressing picture "+(k+1)+" of "+list.length);
+    await sleep0();
+    var ref2=list[k][0], st=list[k][1], dict=st.dict, w=numOf(dict.get(P.PDFName.of("Width"))), h=numOf(dict.get(P.PDFName.of("Height")));
+    var flt=dict.get(P.PDFName.of("Filter")), fname=nameOf2(flt), cs=dict.get(P.PDFName.of("ColorSpace")), csn=nameOf2(cs);
+    var isMask=dict.get(P.PDFName.of("ImageMask")), bpc=numOf(dict.get(P.PDFName.of("BitsPerComponent")));
+    var origLen=st.contents.length;
+    if(!w||!h||origLen<60*1024||(isMask&&String(isMask)==="true")||dict.get(P.PDFName.of("Mask"))){skipped++;continue;}
+    var bmp=null;
+    try{
+      var comps=csn==="DeviceRGB"?3:(csn==="DeviceGray"?1:0);
+      if(!comps&&cs&&cs instanceof P.PDFArray&&nameOf2(cs.get(0))==="ICCBased"){
+        var icc=ctx.lookup(cs.get(1)); comps=icc&&icc.dict?numOf(icc.dict.get(P.PDFName.of("N"))):0; if(comps!==3&&comps!==1) comps=0;
+      }
+      if(!comps){skipped++;continue;}
+      if(fname==="DCTDecode"){
+        bmp=await createImageBitmap(new Blob([st.contents],{type:"image/jpeg"}),{imageOrientation:"none"});
+      }else if(fname==="FlateDecode"&&bpc===8&&!dict.get(P.PDFName.of("Decode"))){
+        var raw=P.decodePDFRawStream(st).decode();
+        if(raw.length<w*h*comps){skipped++;continue;}
+        var rgba=new Uint8ClampedArray(w*h*4), n=w*h, j;
+        if(comps===3){ for(j=0;j<n;j++){rgba[j*4]=raw[j*3];rgba[j*4+1]=raw[j*3+1];rgba[j*4+2]=raw[j*3+2];rgba[j*4+3]=255;} }
+        else { for(j=0;j<n;j++){var g=raw[j];rgba[j*4]=g;rgba[j*4+1]=g;rgba[j*4+2]=g;rgba[j*4+3]=255;} }
+        bmp=await createImageBitmap(new ImageData(rgba,w,h));
+      }else{skipped++;continue;}
+      var sc=Math.min(1,L.side/Math.max(bmp.width,bmp.height)), nw=Math.max(1,Math.round(bmp.width*sc)), nh=Math.max(1,Math.round(bmp.height*sc));
+      var bytes=await toJpeg(bmp,nw,nh,L.q);
+      if(!bytes||bytes.length>origLen*0.92){skipped++;continue;}
+      var nd=dict.clone(); nd.set(P.PDFName.of("Width"),P.PDFNumber.of(nw)); nd.set(P.PDFName.of("Height"),P.PDFNumber.of(nh));
+      nd.set(P.PDFName.of("ColorSpace"),P.PDFName.of("DeviceRGB")); nd.set(P.PDFName.of("BitsPerComponent"),P.PDFNumber.of(8));
+      nd.set(P.PDFName.of("Filter"),P.PDFName.of("DCTDecode")); nd.set(P.PDFName.of("Length"),P.PDFNumber.of(bytes.length));
+      nd.delete(P.PDFName.of("DecodeParms")); nd.delete(P.PDFName.of("Decode"));
+      ctx.assign(ref2,P.PDFRawStream.of(nd,bytes)); changed++; saved+=origLen-bytes.length;
+    }catch(e){ skipped++; }
+    finally{ if(bmp&&bmp.close) try{bmp.close();}catch(x){} }
+  }
+  if(!changed) return {blob:blob,changed:0,skipped:skipped,total:list.length};
+  if(o.status) o.status("Saving the smaller PDF");
+  await sleep0();
+  var out=new Blob([await doc.save({useObjectStreams:true})],{type:"application/pdf"});
+  if(out.size>=blob.size) return {blob:blob,changed:0,skipped:skipped,total:list.length};
+  return {blob:out,changed:changed,skipped:skipped,total:list.length};
+}
+window.AtlasPdf={compress:compress,split:split,merge:merge,planMerge:planMerge,partName:partName,parsePart:parsePart,parseRanges:parseRanges,pageCount:pageCount,extract:extract,rotate:rotate};
 })();

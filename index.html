@@ -4,11 +4,26 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="author" content="Gokul Chandar">
-<meta name="robots" content="noindex, nofollow">
+<meta name="robots" content="index, follow, max-image-preview:large">
+<meta name="description" content="Atlas is a free GitHub manager and Git manager that runs in your browser: a file explorer, file browser and file manager for GitHub repositories. Upload, extract zips, edit, preview, search and back up files from your phone or desktop. No server, no install.">
+<meta name="keywords" content="GitHub Manager, GithubManager, Git Manager, GitManager, Manager for Git, Manager for GitHub, File Explorer for GitHub, File Manager for GitHub, File Browser for GitHub, Atlas for Git, Atlas for GitHub, Atlas GitHub Manager, Atlas GitManager, GitHub file manager, GitHub file explorer, GitHub file browser, upload zip to GitHub, GitHub mobile file manager, GitHub repo editor">
+<meta name="application-name" content="Atlas – GitHub Manager">
+<meta name="apple-mobile-web-app-title" content="Atlas">
+<link rel="canonical" href="https://g-c-3.github.io/githubmanager/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Atlas – GitHub Manager">
+<meta property="og:title" content="Atlas – GitHub Manager, Git Manager & File Explorer for GitHub">
+<meta property="og:description" content="Atlas is a free GitHub manager and Git manager that runs in your browser: a file explorer, file browser and file manager for GitHub repositories. Upload, extract zips, edit, preview, search and back up files from your phone or desktop. No server, no install.">
+<meta property="og:url" content="https://g-c-3.github.io/githubmanager/">
+<meta property="og:image" content="https://g-c-3.github.io/githubmanager/app/icons/icon-512.png">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Atlas – GitHub Manager, Git Manager & File Explorer for GitHub">
+<meta name="twitter:description" content="Atlas is a free GitHub manager and Git manager that runs in your browser: a file explorer, file browser and file manager for GitHub repositories. Upload, extract zips, edit, preview, search and back up files from your phone or desktop. No server, no install.">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "SoftwareApplication", "name": "Atlas", "alternateName": ["GithubManager", "GitHub Manager", "GitManager", "Git Manager", "Manager for Git", "Manager for GitHub", "File Explorer for GitHub", "File Manager for GitHub", "File Browser for GitHub", "Atlas for Git", "Atlas for GitHub", "Atlas GitHub Manager", "Atlas GitManager"], "url": "https://g-c-3.github.io/githubmanager/", "description": "Atlas is a free GitHub manager and Git manager that runs in your browser: a file explorer, file browser and file manager for GitHub repositories. Upload, extract zips, edit, preview, search and back up files from your phone or desktop. No server, no install.", "applicationCategory": "DeveloperApplication", "operatingSystem": "Any (web browser, Android, iOS, Windows, macOS, Linux)", "browserRequirements": "Requires a modern browser with JavaScript", "offers": {"@type": "Offer", "price": "0", "priceCurrency": "USD"}, "author": {"@type": "Person", "name": "Gokul Chandar"}, "keywords": "GitHub Manager, GithubManager, Git Manager, GitManager, Manager for Git, Manager for GitHub, File Explorer for GitHub, File Manager for GitHub, File Browser for GitHub, Atlas for Git, Atlas for GitHub, Atlas GitHub Manager, Atlas GitManager, GitHub file manager, GitHub file explorer, GitHub file browser, upload zip to GitHub, GitHub mobile file manager, GitHub repo editor", "featureList": ["Browse, preview and edit files in a GitHub repository", "Upload files and extract zip, 7z and rar archives straight into a repo", "Search file names and file contents", "Back up the whole repository", "Works on phones, tablets and desktops"]}</script>
 <meta name="referrer" content="no-referrer">
 <meta name="theme-color" content="#060914">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<title>Atlas</title>
+<title>Atlas – GitHub Manager, Git Manager & File Explorer for GitHub</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="app/icons/icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="app/icons/icon-192.png">
@@ -17,6 +32,7 @@
 </head>
 <body>
 
+<noscript><main style="font-family:system-ui,sans-serif;max-width:40rem;margin:2rem auto;padding:0 1rem;line-height:1.55"><h1>Atlas – GitHub Manager</h1><p>Atlas is a file explorer, file browser and file manager for GitHub: a Git manager that runs in your browser with no server. Upload and extract zips, edit and preview files, search, and back up your repository from your phone or desktop. Also known as GithubManager, GitManager, Manager for Git, Manager for GitHub, Atlas for Git and Atlas for GitHub.</p><p>Atlas needs JavaScript. Please enable it to continue.</p><p>Created by Gokul Chandar.</p></main></noscript>
 <div class="aurora" aria-hidden="true"></div>
 <button type="button" class="fhome" id="fHome" aria-label="Go to Files" title="Files"></button>
 <div id="toasts" aria-live="polite"></div>
@@ -96,7 +112,7 @@
           </div>
           <div class="pinstrip" id="pinStrip" hidden></div>
           <div class="pathbar" id="libCrumbs"></div>
-          <label class="selall" id="selAllRow"><input type="checkbox" id="selAllBox"> <span>Select all</span></label>
+          <div class="selall" id="selAllRow" hidden><label class="selallk" id="selAllLbl"><input type="checkbox" id="selAllBox"> <span>Select all</span></label><button type="button" class="cbtn" id="contentBtn" hidden>Search in Content</button></div>
           <div class="list" id="libList"></div>
           <input type="file" id="inFiles" multiple hidden>
         </section>
@@ -129,6 +145,7 @@
               <label class="check" style="margin-top:12px"><input type="checkbox" id="optStrip"> Remove the outer folder from each path</label>
               <label class="check" style="margin-top:4px"><input type="checkbox" id="optSplit"> Split large PDFs into parts</label>
               <p class="hint" id="hintSplit" style="margin:0 0 4px 34px"></p>
+              <div id="cmpBox"></div>
               <label class="field" style="margin-top:8px"><span>Hold back files larger than<i>MB</i></span>
                 <input id="optLimit" type="number" min="1" max="99" step="1" value="50" inputmode="numeric">
               </label>
@@ -162,8 +179,12 @@
               </div>
               <p class="hint">Keep this tab open and the screen on while it runs. Progress is saved in steps, so if it stops, run it again and finished files are skipped.</p>
               <div class="progress" id="barWrap" hidden><i id="bar"></i></div>
+              <div class="rtabs" id="resTabs" role="tablist" aria-label="Extraction result" hidden></div>
+              <div id="resSummary">
               <div id="status" class="status small"></div>
               <details class="more" id="logBox" hidden><summary>Details</summary><div class="log" id="log" aria-live="polite"></div></details>
+              </div>
+              <div class="rlist" id="resList" role="tabpanel" hidden></div>
             </section>
           </div>
         </section>

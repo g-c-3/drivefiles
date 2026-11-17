@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://g-c-3.github.io/githubmanager/sitemap.xml

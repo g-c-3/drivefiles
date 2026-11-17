@@ -1,5 +1,6 @@
+import os
 import sys, io, random, time
-BASE0="/tmp/claude-0/-home-claude/6391391a-3b18-5a3f-8f2c-4bad7241ce53/scratchpad/test"
+BASE0=os.path.dirname(os.path.abspath(__file__))
 exec(open(BASE0+"/t5_head.py").read())
 from PIL import Image
 import pypdf
@@ -60,12 +61,13 @@ with sync_playwright() as p:
     st=json.loads(page.evaluate("localStorage.getItem('a_profiles')")); check(st["list"][0]["kind"]=="pass" and st["list"][0]["enc"]["n"]==600000,"sealed with a passcode, 600000 PBKDF2 rounds")
     check("test-token" not in json.dumps(st),"token not readable in storage")
     # ---- search inside files ----
-    page.click("#searchBtn"); page.wait_for_timeout(400); page.locator("#searchWrap button",has_text="Inside files").click()
-    page.fill("#libSearch","hello atlas"); page.keyboard.press("Enter"); page.wait_for_function("document.querySelector('#libCrumbs').textContent.includes('contain')",timeout=20000)
+    page.click("#searchBtn"); page.wait_for_timeout(400)
+    page.fill("#libSearch","hello atlas"); page.wait_for_selector("#contentBtn:visible"); check(page.locator("#contentBtn").inner_text()=="Search in Content","Search in Content button appears beside Select all")
+    page.click("#contentBtn"); page.wait_for_selector("#libList .lsep",timeout=20000)
     nm=page.locator("#libList .row .name").all_inner_texts()
-    check(len(nm)==1 and "notes.md" in nm[0] and "Hello Atlas" in nm[0],"search inside finds the text with a snippet: %s"%nm)
-    page.fill("#libSearch","zzzzqq"); page.keyboard.press("Enter"); page.wait_for_function("document.querySelector('#libCrumbs').textContent.includes('0 files')",timeout=20000); check(True,"no match says so")
-    page.locator("#searchWrap button",has_text="Names").click(); page.fill("#libSearch",""); page.click("#searchBtn"); page.wait_for_timeout(400)
+    check(page.locator("#libList .lsep").inner_text().strip()=="In Content" and len(nm)==1 and "notes.md" in nm[0] and "Hello Atlas" in nm[0],"content hits appear under an In Content separator with a snippet: %s"%nm)
+    page.fill("#libSearch","zzzzqq"); page.click("#contentBtn"); page.wait_for_function("document.getElementById('contentBtn').textContent==='No result'",timeout=20000); check(True,"button says No result when nothing is found")
+    page.fill("#libSearch",""); page.click("#searchBtn"); page.wait_for_timeout(400)
     # ---- markdown pictures ----
     page.goto(URL) if False else None
     page.evaluate("1")
@@ -147,7 +149,7 @@ with sync_playwright() as p:
     check("backup" in dl.value.suggested_filename,"backup name: "+dl.value.suggested_filename)
     page.wait_for_timeout(500)
     # ---- auto-lock ----
-    OPENMENU(); page.locator(".layer.open .seg button, .layer.open [role=group] button",has_text="1 min").first.click(); page.wait_for_timeout(200); sheet_click(page,"Close"); page.wait_for_timeout(400)
+    OPENMENU(); page.locator(".layer.open .seg button, .layer.open [role=group] button",has_text="1m").first.click(); page.wait_for_timeout(200); sheet_click(page,"Close"); page.wait_for_timeout(400)
     page.clock.fast_forward(75000); page.wait_for_selector("#s-home:not([hidden])",timeout=15000); check(True,"locks itself after the chosen idle time")
     # ---- legacy profile upgrade ----
     page.evaluate("""()=>{var o=JSON.parse(localStorage.getItem('a_profiles'));o.list[0]={id:o.list[0].id,repo:'me/qp',branch:'main',kind:'plain',cfg:{repo:'me/qp',branch:'main',token:'test-token'}};localStorage.setItem('a_profiles',JSON.stringify(o));}""")

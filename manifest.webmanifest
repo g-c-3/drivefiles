@@ -1,5 +1,5 @@
 {
- "name": "Atlas",
+ "name": "Atlas – GitHub Manager",
  "short_name": "Atlas",
  "start_url": ".",
  "scope": ".",
@@ -38,5 +38,11 @@
     }
    ]
   }
- }
+ },
+ "description": "GitHub manager, Git manager and file explorer for GitHub. Browse, upload, extract, edit and back up repo files from your browser.",
+ "categories": [
+  "developer",
+  "productivity",
+  "utilities"
+ ]
 }
