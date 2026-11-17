@@ -42,9 +42,9 @@ with sync_playwright() as p:
     page.click("#homeAdd"); page.fill("#cfgOwner","me"); page.fill("#cfgRepo","qp"); page.fill("#cfgToken","test-token"); page.fill("#cfgPass","a"); page.click("#setupOpen"); page.wait_for_selector("#libList .row")
     # ---- dates ----
     page.wait_for_function("document.querySelector('#libList .row .dt')",timeout=15000)
-    txt=page.inner_text("#libList .row >> nth=0")
+    txt=re.sub(r"[ \t]+"," ",page.inner_text("#libList .row >> nth=0"))
     check(re.search(r"\d\d [A-Z][a-z]{2} \d{4} \d\d:\d\d [ap]m",txt) is not None,"rows show date and time: "+txt.replace("\n"," | "))
-    check("14 Nov 2026 10:00 am" in page.inner_text("#libList"),"date comes from the commit that last touched the file")
+    check("14 Nov 2026 10:00 am" in re.sub(r"\s+"," ",page.inner_text("#libList")),"date comes from the commit that last touched the file")
     check("modified" not in page.inner_text("#libList").lower() and "created" not in page.inner_text("#libList").lower(),"no 'created/modified' label")
     check(len(releases)==0,"no backup made just by browsing")
     # ---- extract + result tabs, with the recovery backup before the first change ----
@@ -57,8 +57,10 @@ with sync_playwright() as p:
     check(releases[0]["target_commitish"]=="main","release targets the branch")
     toast_has(page,"Recovery backup saved",5000) if False else None
     tabs=[t.strip().replace("\n"," ") for t in page.locator("#resTabs button").all_inner_texts()]
-    check([re.sub(r"\s*\d+$","",t) for t in tabs]==["Summary","New","Replaced","Skipped","Processed"],"result tabs: %s"%tabs)
-    check("Done" in page.inner_text("#resSummary"),"Summary tab keeps the existing result text")
+    check([re.sub(r"\s*\d+$","",t) for t in tabs]==["New","Replaced","Skipped","Processed"],"result tabs: %s"%tabs)
+    check("Done" in page.inner_text("#log") and page.inner_text("#status").strip()=="" and page.locator("#log").is_visible(),"the details box shows the result once, no Summary tab")
+    sw=page.evaluate("(()=>{const b=document.getElementById('resTabs');return [b.scrollWidth<=b.clientWidth+1,b.getBoundingClientRect().right<=innerWidth]})()")
+    check(sw==[True,True],"four tabs fit the screen without scrolling")
     page.locator("#resTabs button",has_text="New").click(); page.wait_for_timeout(300)
     nw=page.inner_text("#resList")
     check("a.txt" in nw and "photo.jpg" in nw and "small.pdf" in nw and "notes.md" not in nw,"New lists uploaded files")
@@ -69,8 +71,8 @@ with sync_playwright() as p:
     check("photo.jpg" in pr and "Compressed" in pr and "small.pdf" not in pr and "a.txt" not in pr,"Processed lists only the shrunk image, tagged Compressed: "+pr.replace("\n"," | "))
     page.locator("#resTabs button",has_text="Replaced").click(); page.wait_for_timeout(300)
     check("Nothing" in page.inner_text("#resList") or "No existing" in page.inner_text("#resList"),"Replaced is empty when nothing was replaced")
-    page.locator("#resTabs button",has_text="Summary").click(); page.wait_for_timeout(200)
-    check(page.locator("#resSummary").is_visible() and not page.locator("#resList").is_visible(),"Summary tab shows summary again")
+    page.locator("#resTabs button",has_text="Replaced").click(); page.wait_for_timeout(300)
+    check(not page.locator("#resList").is_visible(),"tapping the open tab again closes its list")
     page.wait_for_timeout(800)
     # ---- second change in same session: no second backup; replaced + compressed pdf ----
     page.evaluate("localStorage.setItem('a_prefs',JSON.stringify({filePolicy:'replace',limit:3,compressPdf:true,compressLevel:'strong',splitPdf:true}))")

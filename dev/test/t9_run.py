@@ -37,6 +37,13 @@ with sync_playwright() as p:
     names=list(heads.keys()) if 'heads' in dir() else []
     txt=page.inner_text(".layer.open")
     check("null" not in txt,"branches sheet has no 'null' text")
+    page.keyboard.press("Escape"); page.wait_for_timeout(900)
+    page.click("#menuBtn"); page.wait_for_selector(".layer.open .mgrp"); page.locator(".layer.open .mrow",has_text="Saved repositories").click(); page.wait_for_selector(".layer.open [aria-label='Select all']",timeout=5000); page.wait_for_timeout(400)
+    allcb=page.locator(".layer.open [aria-label='Select all']"); rowcb=page.locator(".layer.open .list input[type=checkbox]").first
+    rowcb.check(); page.wait_for_timeout(200); check(allcb.is_checked(),"select all ticks when every repo is ticked")
+    page.locator(".layer.open .list input[type=checkbox]").first.uncheck(); page.wait_for_timeout(200)
+    check(not page.locator(".layer.open [aria-label='Select all']").is_checked(),"select all clears when the last one is unticked")
+    page.screenshot(path=SHOTS+"/z_saved.png")
     check(page.evaluate("document.documentElement.scrollWidth<=innerWidth"),"no horizontal overflow")
     check(not errors,"no page errors: %s"%errors[:3])
     b.close()

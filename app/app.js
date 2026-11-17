@@ -636,6 +636,7 @@ function manageSheet(){
       row.addEventListener("click",function(e){ if(e.target===cb) return; if(sel.has(p.id)) sel.delete(p.id); else sel.add(p.id); paint(); });
       list.appendChild(row);
     });
+    var ac=all&&all.querySelector("input"); if(ac){ ac.checked=PF.list.length>0&&sel.size===PF.list.length; ac.indeterminate=sel.size>0&&sel.size<PF.list.length; }
     if(del){ del.disabled=!sel.size; del.textContent=sel.size?"Delete "+sel.size+" selected":"Delete selected"; }
   }
   var all=el("label",{class:"check",style:"margin:0 0 6px"},el("input",{type:"checkbox","aria-label":"Select all",onchange:function(e){ sel.clear(); if(e.target.checked) PF.list.forEach(function(p){sel.add(p.id);}); paint(); }}),"Select all");
@@ -666,7 +667,7 @@ function closeLayer(layer){
   var i=sheetStack.indexOf(layer); if(i<0) return; sheetStack.splice(i,1);
   if(layer._nav){ Nav.drop(layer._nav); layer._nav=null; }
   layer.classList.remove("open");
-  setTimeout(function(){ if(layer.parentNode) layer.parentNode.removeChild(layer); },300);
+  setTimeout(function(){ if(layer.parentNode) layer.parentNode.removeChild(layer); },460);
   if(layer._onClose) layer._onClose();
 }
 function closeAllSheets(){sheetStack.slice().forEach(closeLayer);}
@@ -1070,13 +1071,14 @@ function renderLibrary(){
     var inherited=hasAncestor(x.path,S.lib.sel), on=S.lib.sel.has(x.path)||inherited;
     var cb=el("input",{type:"checkbox",checked:on,disabled:inherited,"aria-label":"Select "+basename(x.path),
       onchange:function(){ if(cb.checked) S.lib.sel.add(x.path); else S.lib.sel.delete(x.path); renderLibrary(); }});
-    var dl=dateLabel(x.path,x.dir);
-    var sub=x.dir?(plural(x.count,"file")+", "+fmt(x.size)):fmt(x.size);
-    var shown=q?basename(x.path):x.name||basename(x.path);
-    var where=q&&basename(x.path)!==x.path?x.path.slice(0,x.path.length-basename(x.path).length-1)+"  ·  "+sub:sub;
+    var dl=dateLabel(x.path,x.dir), shown=q?basename(x.path):x.name||basename(x.path);
+    var meta=[]; if(q&&basename(x.path)!==x.path) meta.push(x.path.slice(0,x.path.length-basename(x.path).length-1));
+    if(x.dir) meta.push(plural(x.count,"file")); meta.push(fmt(x.size));
+    var dm=/^(.*\d{4}) (\d\d:\d\d [ap]m)$/.exec(dl); if(dm) meta.push({d:dm[1],t:dm[2]}); else if(dl) meta.push(dl);
+    var small=el("small",null); meta.forEach(function(t,i){ if(i){ small.appendChild(document.createTextNode(" ")); small.appendChild(el("i",{class:"sd","aria-hidden":"true"})); small.appendChild(document.createTextNode(" ")); } small.appendChild(typeof t==="string"?el("span",{class:"dt"},t):el("span",{class:"dt"},t.d," ",el("i",{class:"sd","aria-hidden":"true"})," ",t.t)); });
     var row=el("div",{class:"row"+(x.dir?" nav":"")+(on?" sel":"")},cb,
       x.dir?folderTile(basename(x.path)):fileTile(basename(x.path)),
-      el("div",{class:"name"},shown,isAppPath(x.path)?el("span",{class:"tag app",title:"Part of this app"},"app"):null,el("small",null,(q&&basename(x.path)!==x.path)?x.path.slice(0,x.path.length-basename(x.path).length-1)+"  ·  ":null,el("span",{class:"dt"},sub),dl?el("span",{class:"dt"}," · "+dl):null),x.snip?el("small",{class:"snip"},x.snip):null),
+      el("div",{class:"name"},shown,isAppPath(x.path)?el("span",{class:"tag app",title:"Part of this app"},"app"):null,small,x.snip?el("small",{class:"snip"},x.snip):null),
       x.dir?el("span",{class:"muted"},ico("chev")):null);
     row.addEventListener("click",function(e){
       if(e.target===cb) return;
@@ -1985,20 +1987,22 @@ $("colAll").onclick=function(){allDirs(S.ex.root).forEach(function(d){d.open=fal
 $("stop").onclick=function(){S.ex.cancel=true;$("status").textContent="Stopping after the current file…";};
 window.addEventListener("beforeunload",function(e){if(S.ex.running||uploadBusy){e.preventDefault();e.returnValue="";}});
 function exLog(msg,cls){
-  var box=$("log"); $("logBox").hidden=false;
+  var box=$("log"); box.hidden=false;
   var d=document.createElement("div"); if(cls) d.className=cls; d.textContent=msg; box.appendChild(d);
   while(box.childNodes.length>400) box.removeChild(box.firstChild);
   box.scrollTop=box.scrollHeight;
 }
 /* result tabs: Summary (status + log), New, Replaced, Skipped, Processed */
-function hideResults(){ $("resTabs").hidden=true; $("resTabs").replaceChildren(); $("resList").hidden=true; $("resList").replaceChildren(); $("resSummary").hidden=false; }
+function hideResults(){ $("resTabs").hidden=true; $("resTabs").replaceChildren(); $("resList").hidden=true; $("resList").replaceChildren(); }
 function showResults(R){
-  var defs=[["sum","Summary",null],["new","New",R.newFiles],["rep","Replaced",R.replacedFiles],["skip","Skipped",R.skippedFiles],["proc","Processed",R.processed]];
-  var bar=$("resTabs"), list=$("resList"); bar.replaceChildren();
+  var defs=[["new","New",R.newFiles],["rep","Replaced",R.replacedFiles],["skip","Skipped",R.skippedFiles],["proc","Processed",R.processed]];
+  var bar=$("resTabs"), list=$("resList"), cur=null; bar.replaceChildren();
   function pick(id){
+    cur=id;
     Array.prototype.forEach.call(bar.children,function(b){ b.setAttribute("aria-selected",String(b.dataset.t===id)); });
-    $("resSummary").hidden=(id!=="sum"); list.hidden=(id==="sum"); if(id==="sum") return;
+    list.hidden=!id; if(!id){ list.replaceChildren(); return; }
     var d=defs.filter(function(x){return x[0]===id;})[0], arr=d[2]; list.replaceChildren();
+    list.style.animation="none"; void list.offsetWidth; list.style.animation="";
     if(!arr.length){ list.appendChild(el("div",{class:"rempty"},{new:"No new files were added.",rep:"No existing files were replaced.",skip:"Nothing was skipped.",proc:"No pictures or PDFs needed processing."}[id])); return; }
     arr.forEach(function(x){
       var path=typeof x==="string"?x:x.path, extra=null;
@@ -2008,9 +2012,9 @@ function showResults(R){
     });
   }
   defs.forEach(function(d){
-    bar.appendChild(el("button",{type:"button",role:"tab","data-t":d[0],"aria-selected":"false",onclick:function(){pick(d[0]);}},d[1],d[2]?el("i",null,String(d[2].length)):null));
+    bar.appendChild(el("button",{type:"button",role:"tab","data-t":d[0],"aria-selected":"false",onclick:function(){pick(cur===d[0]?null:d[0]);}},el("span",null,d[1]),el("i",null,String(d[2].length))));
   });
-  bar.hidden=false; pick("sum");
+  bar.hidden=false; pick(null);
 }
 function exLock(on){
   document.querySelectorAll("#upBody button, #upBody input, #drop button, #clearUp").forEach(function(e){e.disabled=on;});
@@ -2027,14 +2031,14 @@ $("go").onclick=async function(){
     try{ if("wakeLock" in navigator) wl=await navigator.wakeLock.request("screen"); }catch(e){}
     var ui={status:function(t){$("status").textContent=t;},progress:function(f){$("bar").style.width=Math.round(f*100)+"%";},log:exLog};
     var R=await sendItems({sel:sel,dest:dest,filePolicy:S.opts.filePolicy,folderPolicy:"merge",forceSame:S.opts.forceSame,ui:ui,cancelled:function(){return S.ex.cancel;}});
-    $("status").textContent=R.text; exLog(R.text,R.todo.length?"warn":"ok"); toast(R.text,R.todo.length>0); showResults(R);
+    $("status").textContent=""; exLog(R.text,R.todo.length?"warn":"ok"); toast(R.text,R.todo.length>0); showResults(R);
     if(R.todo.length){
       var left=new Set(R.todo); allFiles(S.ex.root).forEach(function(f){f.checked=left.has(f.path);}); S.ex.retry=R.todo.length; exRender();
       exLog("Tap “Retry "+R.todo.length+" left” to finish. Only these are selected now.","warn");
     }
     S.act.loaded=false; loadRepo();
   }catch(e){
-    var m=friendly(e); $("status").textContent="Stopped: "+m; exLog("Error: "+m,"bad");
+    var m=friendly(e); $("status").textContent=""; exLog("Stopped: "+m,"bad");
     exLog("Anything already saved is safe. Fix the problem and run it again; finished files are skipped.","warn"); toast(m,true);
   }finally{
     try{if(wl) await wl.release();}catch(e){}
@@ -2286,7 +2290,7 @@ $("menuBtn").addEventListener("click",function(){
   function mrow(icon,title,sub,fn,danger){
     return el("button",{class:"btn mrow"+(danger?" danger-row":""),type:"button",onclick:fn},el("span",{class:"mi"},ico(icon)),el("span",{class:"mt"},el("b",null,title),sub?el("small",null,sub):null),el("span",{class:"mc"},ico("chev")));
   }
-  function pick(fn){ return function(){closeAllSheets();fn();}; }
+  function pick(fn){ return function(){closeAllSheets();setTimeout(fn,300);}; }
   var list=el("div",{class:"menu"},
     grp("Display",
       el("div",{class:"mset"},el("span",null,"Theme"),seg([["light","Light"],["dark","Dark"],["night","Night"]],S.opts.theme||"dark",function(v){applyTheme(v);})),

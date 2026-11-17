@@ -1,7 +1,7 @@
 import base64, hashlib, http.server, json, os, re, socketserver, sys, threading, zipfile
 from playwright.sync_api import sync_playwright
 
-BASE = "/tmp/claude-0/-home-claude/6391391a-3b18-5a3f-8f2c-4bad7241ce53/scratchpad/test"
+BASE = os.path.dirname(os.path.abspath(__file__))
 SHOTS = BASE + "/shots"; os.makedirs(SHOTS, exist_ok=True)
 
 def gsha(b): return hashlib.sha1(b"blob %d\0" % len(b) + b).hexdigest()
@@ -27,7 +27,7 @@ threading.Thread(target=srv.serve_forever, daemon=True).start()
 blob_size = {}; blob_data = {}
 def add_blob(b): s = gsha(b); blob_size[s] = len(b); blob_data[s] = b; return s
 snaps, commits, ctr = {}, {}, {"t": 0, "c": 0}
-FX = "/tmp/claude-0/-home-claude/6391391a-3b18-5a3f-8f2c-4bad7241ce53/scratchpad/v4/fx/"
+FX = os.path.join(os.path.dirname(os.path.abspath(__file__)),"fx")+"/"
 def fx(n): return open(FX + n, "rb").read()
 MD = b"# Hello Atlas\n\nSee ![fig](fig.png) and [data](data.json) and [web](https://example.com).\n\n```python\nprint('hi')\n```\n\n| a | b |\n|---|---|\n| 1 | 2 |\n\n<script>window.__xss=1</script>\n"
 PY = b"def hello():\n    return 'world'\n"
