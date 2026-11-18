@@ -16,6 +16,7 @@ async function needZip(){ await loadScript("app/vendor/zip.min.js"); if(!needZip
 
 /* ================= helpers ================= */
 var ICONS={
+ shield:'<path d="M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6z"/><path d="M9 12l2 2 4-4"/>',
  key:'<circle cx="8" cy="15" r="4"/><path d="M11 12l8-8"/><path d="M16 7l3 3"/>',
  mark:'<circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17"/><path d="M12 3.5c3 2.6 3 14.4 0 17"/><path d="M12 3.5c-3 2.6-3 14.4 0 17"/>',
  upload:'<path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M5 20h14"/>',
@@ -77,6 +78,13 @@ function fmt(n){
   return (n/1024/MB).toFixed(2)+" GB";
 }
 /* parts joined by a centred dot (a fragment, so it can go anywhere text can) */
+/* keep the count and size on one line with the toolbar; stack them (smaller, count above size) only when they would not fit */
+function fitStat(){
+  var st=$("libStat"); if(!st) return;
+  st.classList.remove("stack");
+  if(st.scrollWidth>st.clientWidth+1) st.classList.add("stack");
+}
+window.addEventListener("resize",function(){ var st=$("libStat"); if(st&&st.firstChild&&st.offsetParent!==null) fitStat(); });
 function dots(parts){
   var f=document.createDocumentFragment(), first=true;
   parts.forEach(function(t){ if(t==null||t==="") return; if(!first){ f.appendChild(document.createTextNode(" ")); f.appendChild(el("i",{class:"sd","aria-hidden":"true"})); f.appendChild(document.createTextNode(" ")); } first=false; f.appendChild(document.createTextNode(t)); });
@@ -295,13 +303,13 @@ function lockNow(){
 var DISC_VER=1, CONTACT="gc3thedev@gmail.com";
 function discBody(){
   return el("div",{class:"disc"},
-    el("p",{class:"disc-lead"},"Atlas is a free tool that works directly on your GitHub repository. Please read this before you continue."),
+    el("p",{class:"disc-lead"},"Please read this first. It takes a minute."),
     el("ul",{class:"disc-list"},
-      el("li",null,el("b",null,"Use at your own will and risk. "),"You are fully responsible for what you do with Atlas, your repository, your access token and your files."),
-      el("li",null,el("b",null,"No liability. "),"This site, its owner and its creator are not responsible for any data loss, security issue, theft, damage, loss or harm of any kind. That includes your repository and its contents, its privacy, your identity, your account, and anything else connected to your use of Atlas."),
-      el("li",null,el("b",null,"No warranty. "),"Atlas is provided as is, without promises that it is error free, always available, or suitable for any purpose. Bugs, interrupted uploads and browser limits can happen."),
-      el("li",null,el("b",null,"Your token is yours to protect. "),"It is stored only on this device, encrypted with your passcode. Use a token limited to this one repository, and revoke it on GitHub if you lose the device."),
-      el("li",null,el("b",null,"Unsaved edits are not kept. "),"If Atlas locks, logs you out or the page reloads while a file is open, changes you haven't saved are lost.")));
+      el("li",null,el("b",null,"Use at your own will and risk. "),"You are fully responsible for what you do with Atlas, your repository, token and files."),
+      el("li",null,el("b",null,"No liability. "),"This site, its owner and its creator are not responsible for any data loss, security issue, theft, damage, loss or harm of any kind, including to your repository and its data, privacy, identity, account, or anything else connected to your use of Atlas."),
+      el("li",null,el("b",null,"No warranty. "),"Atlas is provided as is, with no promise that it is error free, always available or fit for any purpose."),
+      el("li",null,el("b",null,"Your token is yours to protect. "),"It stays on this device, encrypted with your passcode. Use a token limited to one repository, and revoke it on GitHub if you lose the device."),
+      el("li",null,el("b",null,"Unsaved edits are not kept. "),"If Atlas locks, logs you out or reloads while a file is open, changes you haven't saved are lost.")));
 }
 function disclaimerGate(p,go){
   var a=openSheet({title:"Before you continue",content:discBody(),closeX:false,actions:[
@@ -352,9 +360,7 @@ function aboutSheet(){
       fact("files","Built for phones","Fast, touch friendly, works offline once opened."),
       fact("archive","Free and open","MIT licensed. Read the code, change it, share it.")),
     el("div",{class:"ab-btns"},
-      el("button",{type:"button",class:"pill",onclick:function(){openReadme();}},"README"),
-      el("button",{type:"button",class:"pill",onclick:function(){var a2=openSheet({title:"Terms of use",content:discBody(),closeX:true,noFooter:true,actions:[]});}},"Disclaimer"),
-      el("a",{class:"pill",href:"LICENSE",target:"_blank",rel:"noopener"},"Licence")),
+      el("button",{type:"button",class:"pill",onclick:function(){openSheet({title:"Terms of use",content:discBody(),closeX:true,noFooter:true,actions:[]});}},"Disclaimer")),
     el("div",{class:"ab-credit"},
       el("p",null,"Designed and built by ",el("b",null,"Gokul Chandar"),"."),
       el("p",null,"Questions or ideas? ",el("a",{href:"mailto:"+CONTACT},CONTACT)),
@@ -1183,7 +1189,7 @@ function renderLibrary(){
   }
   if(!r.loaded) return;
   var total=0; r.files.forEach(function(f,p){if(!S.opts.hideApp||!isApp(p))total+=f.size;});
-  $("libStat").replaceChildren(dots([plural(countVisibleFiles(),"file"),fmt(total),r.truncated?"list is partial":null]));
+  $("libStat").replaceChildren(dots([plural(countVisibleFiles(),"file"),fmt(total),r.truncated?"list is partial":null])); fitStat();
   var q=S.lib.q.trim();
   if(q){
     $("libCrumbs").appendChild(el("span",{class:"muted small",style:"padding:7px 9px"},"Results for “"+q+"”"));

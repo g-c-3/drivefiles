@@ -4,15 +4,12 @@
 
 *Created by Gokul Chandar*
 
-[![Open the app](https://img.shields.io/badge/%E2%96%B6%20OPEN%20THE%20APP-g--c--3.github.io%2Fgithubmanager-6366f1?style=for-the-badge&labelColor=0b1020)](https://g-c-3.github.io/githubmanager/)
 
 </div>
 
-> [!CAUTION]
 > **Disclaimer: use at your own will and risk.**
 > This site, its owner and its creator are **not responsible** for any data loss, security issue, theft, damage, loss or harm of any kind. That covers your repository and its data, its privacy, your identity, your account, and everything else connected to using Atlas. Atlas is provided "as is", with no warranty. You are fully responsible for your token, your passcode and your files. The first time you log in to each repository, Atlas shows this notice and you must accept it before you can continue. Nothing here is legal advice.
 
-> [!IMPORTANT]
 > **App link: <https://g-c-3.github.io/githubmanager/>**
 > Works on phones, foldables, tablets and computers. Everything runs in your browser. There is no server.
 
@@ -54,7 +51,6 @@ app/            ← scripts, styles, viewers, converters, licences
 
 The app files show in the file list with a small **app** tag, and Delete and Move warn you if the selection includes them. They are always shown, so you can see and protect them.
 
-> [!NOTE]
 > You can add more files to `app/` later. The app loads its pieces only when needed, so opening a PDF loads the PDF engine and nothing else. No part of it depends on an outside server.
 
 ## Getting started
@@ -151,7 +147,6 @@ Browsers can't show `.doc`, `.xls` and `.ppt`. Atlas converts them on your devic
 
 To convert many at once, select files or folders on the Files tab and choose **Convert**. Files that already have a converted copy are skipped.
 
-> [!NOTE]
 > The converters are written for this app and tested on files produced by LibreOffice. Word- and PowerPoint-made files follow the same format but may expose cases I couldn't test. Check a few before relying on a large batch. Password-protected old files can't be converted; remove the password first.
 
 ## Supported archives
@@ -164,7 +159,6 @@ To convert many at once, select files or folders on the Files tab and choose **C
 | GZ, BZ2, XZ (single file) | ✅ | n/a |
 | RAR | ✅ through 7-Zip's RAR support | ✅ |
 
-> [!NOTE]
 > RAR is untested because I had no RAR file to try. Everything else above was tested end to end.
 
 Tap a file's name in the extract list to **preview it before extracting**.
