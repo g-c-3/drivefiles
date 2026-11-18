@@ -147,7 +147,7 @@ var S={
   ex:{names:[],readers:[],items:[],errors:[],root:null,locked:[],dest:"",destTouched:false,running:false,cancel:false,opening:false},
   lib:{cwd:"",sel:new Set(),q:"",exp:new Set(),hits:null,busy:0},
   act:{loaded:false,list:[]},
-  opts:{filePolicy:"skip",folderPolicy:"merge",strip:false,limit:50,splitPdf:true,forceSame:false,theme:"dark",sortKey:"name",sortDir:"asc",hideApp:false,offline:false,recovery:true,wrap:true,justify:false,keepSel:false,autoLock:2,shrink:false,shrinkMax:2048,compressPdf:false,compressLevel:"medium"}
+  opts:{filePolicy:"skip",folderPolicy:"merge",strip:false,limit:50,splitPdf:true,forceSame:false,theme:"dark",sortKey:"name",sortDir:"asc",hideApp:false,offline:false,recovery:true,wrap:true,justify:false,extractHere:false,keepSel:false,autoLock:2,shrink:false,shrinkMax:2048,compressPdf:false,compressLevel:"medium"}
 };
 var VK="a_vault", PK="a_prefs", lastWrite=0, hiddenAt=0;
 
@@ -828,16 +828,13 @@ function buildTabs(){
     side.appendChild(el("button",{type:"button","data-tab":t[0],onclick:function(){setTab(t[0]);}},ico(t[2]),t[1]));
   });
 }
-function setTab(name){
-  viewNav(S.lib.cwd,name);
-  setTabRaw(name);
-}
+function setTab(name){ setTabRaw(name); }
 function setTabRaw(name){
-  S.tab=name;
+  S.tab=name; syncViewNav();
   TABS.forEach(function(t){$("tab-"+t[0]).hidden=(t[0]!==name);});
   document.querySelectorAll("[data-tab]").forEach(function(b){b.setAttribute("aria-current",String(b.getAttribute("data-tab")===name));});
   if(name==="files") renderLibrary();
-  if(name==="extract"){ if(!S.ex.destTouched) S.ex.dest=S.lib.cwd; paintExDest(); upPreview(); }
+  if(name==="extract"){ if(!S.ex.destTouched) S.ex.dest=S.opts.extractHere?S.lib.cwd:""; paintExDest(); upPreview(); }
   if(name==="history"&&!S.act.loaded) loadActivity();
   updateActionbar(); $("pane").scrollTop=0; window.scrollTo(0,0);
   placeHome();
@@ -1111,23 +1108,29 @@ function childDirs(dir){
   var m=S.repo.index.get(dir); if(!m) return [];
   return Array.from(m.values()).filter(function(e){return e.dir;}).sort(function(a,b){return a.name.localeCompare(b.name,undefined,{numeric:true});});
 }
-function viewBack(c,t){return function(){ goDirRaw(c); setTabRaw(t); };}
-function viewNav(c,t){
-  var cc=S.lib.cwd, ct=S.tab, i;
-  if(c===cc&&t===ct) return;
-  for(i=Nav.st.length-1;i>=0&&Nav.st[i].kind==="view";i--){
-    var f=Nav.st[i].from; if(f.c===c&&f.t===t){ Nav.st.length=i; Nav.sched(); return; }
+/* Back is one-way: it climbs. Entries of kind "view" = one per folder level below the root, plus one if a tab other than Files is open. */
+function stepUp(){
+  if(S.tab!=="files"){ setTabRaw("files"); return; }
+  if(S.lib.cwd){ var i=S.lib.cwd.lastIndexOf("/"); goDirRaw(i<0?"":S.lib.cwd.slice(0,i)); }
+}
+function viewNav(){ syncViewNav(); }
+function syncViewNav(){
+  var want=S.cfg?((S.lib.cwd?S.lib.cwd.split("/").length:0)+(S.tab!=="files"?1:0)):0;
+  var have=Nav.st.filter(function(e){return e.kind==="view";}).length, i;
+  if(have===want) return;
+  if(have>want){
+    for(i=Nav.st.length-1;i>=0&&have>want;i--) if(Nav.st[i].kind==="view"){ Nav.st.splice(i,1); have--; }
+  }else{
+    var at=-1; for(i=0;i<Nav.st.length;i++) if(Nav.st[i].kind==="view"||Nav.st[i].kind==="session") at=i;
+    while(have<want){ Nav.st.splice(++at,0,{close:stepUp,kind:"view"}); have++; }
   }
-  var e=Nav.push(viewBack(cc,ct),"view"); e.from={c:cc,t:ct};
+  Nav.sched();
 }
-function goDir(path){
-  viewNav(path,"files");
-  goDirRaw(path);
-}
+function goDir(path){ goDirRaw(path); }
 function goDirRaw(path){
   if(path!==S.lib.cwd&&!S.opts.keepSel&&S.lib.sel.size) S.lib.sel.clear();
   var prev=S.lib.cwd||"", dirDir=path===prev?"":((path.length>prev.length&&(prev===""||path.indexOf(prev+"/")===0))?"in":"out");
-  S.lib.cwd=path; S.lib.q=""; $("libSearch").value="";
+  S.lib.cwd=path; S.lib.q=""; $("libSearch").value=""; syncViewNav();
   var parts=path?path.split("/"):[], acc="";
   parts.forEach(function(p){acc=joinPath(acc,p);S.lib.exp.add(acc);});
   setTabRaw("files");
@@ -2189,7 +2192,7 @@ $("go").onclick=async function(){
     exLog("Anything already saved is safe. Fix the problem and run it again; finished files are skipped.","warn"); toast(m,true);
   }finally{
     try{if(wl) await wl.release();}catch(e){}
-    S.logSink=null; S.ex.running=false; exLock(false); $("stop").hidden=true; $("barWrap").classList.remove("run");
+    S.logSink=null; S.ex.running=false; S.ex.destTouched=false; exLock(false); $("stop").hidden=true; $("barWrap").classList.remove("run");
   }
 };
 
@@ -2446,6 +2449,7 @@ $("menuBtn").addEventListener("click",function(){
       shrinkControls(),
       switchRow("Wrap long lines in files",!!S.opts.wrap,function(v){S.opts.wrap=v;savePrefs();},"Applies to text and code you open. You can still switch it per file."),
       switchRow("Justify text when viewing",!!S.opts.justify,function(v){S.opts.justify=v;savePrefs();},"Markdown and plain text only, view only. Needs line wrapping. Code and data files are never justified."),
+      switchRow("Extract into the folder I'm browsing",!!S.opts.extractHere,function(v){S.opts.extractHere=v;savePrefs();S.ex.destTouched=false;},"Off: archives are always extracted into the repository root unless you change it. On: into the folder you are viewing."),
       switchRow("Keep selection between folders",!!S.opts.keepSel,function(v){S.opts.keepSel=v;savePrefs();if(!v){S.lib.sel.clear();renderLibrary();}},"Off: selected items are cleared as soon as you go to another folder."),
       switchRow("Keep opened files for offline use",!!S.opts.offline,function(v){S.opts.offline=v;savePrefs();if(!v)clearOffline();},"Saves opened files on this device, unencrypted. Turn off on a shared device."),
       switchRow("Recovery backup before changes",!!S.opts.recovery,function(v){S.opts.recovery=v;savePrefs();},"Before the first change of each session, publishes a RecoveryBackup release of the whole repo.")),

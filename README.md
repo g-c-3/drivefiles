@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🌐 [**Open Atlas → g-c-3.github.io/githubmanager**](https://g-c-3.github.io/githubmanager/)
+# 🌐 [**Atlas**](https://g-c-3.github.io/githubmanager/)
 
 *Created by Gokul Chandar*
 
@@ -221,6 +221,11 @@ Folders are always merged: new files go into the folder that's already there. Th
 - **Terms notice.** The first time you log in to a repository (and once for repositories saved earlier), Atlas shows a short notice. You must choose **I understand and accept** to enter. **I don't agree** offers **Log out** (the notice returns next login), **Delete token & log out** (removes the saved repository and token from this device; revoke the token on GitHub too), or **Read it again**. If you lock, log out or reload before deciding, you are asked again. Once accepted it is not shown again for that repository.
 - **Info button.** The round **i** at the top right of the Add and Login screens opens this README inside Atlas.
 - **About.** A pill button under "Created by Gokul Chandar" (Settings and the login screen) opens a small About dashboard with the features, privacy facts, links to this README, the disclaimer and the licence, and contact: gc3thedev@gmail.com.
+
+## Back button and extract destination
+
+- **Back only climbs.** It closes whatever is on top (a dialog, sheet or open file), then returns from Extract or History to Files in the folder you last viewed, then goes up one folder at a time. At the repository root it says "Press back again to log out"; a second press logs out. Back never leads forward into a folder you left.
+- **Extract destination.** Archives are extracted into the repository root by default, wherever you were browsing. Turn on **Settings > Extract into the folder I'm browsing** to start from the current folder instead. You can always change the folder with "Change". Uploads still go to the folder you are viewing.
 
 ## Justify text (view only)
 
