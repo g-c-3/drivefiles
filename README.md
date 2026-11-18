@@ -222,6 +222,10 @@ Folders are always merged: new files go into the folder that's already there. Th
 - **Info button.** The round **i** at the top right of the Add and Login screens opens this README inside Atlas.
 - **About.** A pill button under "Created by Gokul Chandar" (Settings and the login screen) opens a small About dashboard with the features, privacy facts, links to this README, the disclaimer and the licence, and contact: gc3thedev@gmail.com.
 
+## Justify text (view only)
+
+**Settings > Preferences > Justify text when viewing** (off by default) and the justify button in the viewer justify Markdown and plain text (`.txt`, `.rst`) while you read. It needs line wrapping on for plain text. It never changes the file: editing always shows the original spacing and lines. Code and data files (JSON, CSV, HTML, source code) show the button greyed out with the note "not useful for code". The README opened from the info button is always justified and has no top bar, just a floating close button.
+
 ## Unsaved edits are not kept
 
 If Atlas locks (auto-lock or the lock button), you log out, or the page reloads while a file is open for editing, **changes you haven't saved are lost**. Atlas closes the open file when it locks and, after you log in again, reopens the same place, but not your unsaved text. Save before you step away.

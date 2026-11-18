@@ -425,7 +425,7 @@ with sync_playwright() as p:
     sm=io.BytesIO(); c=rl.Canvas(sm); c.drawString(50,700,"small"); c.showPage(); c.save()
     zb=io.BytesIO()
     with zipfile.ZipFile(zb,"w",zipfile.ZIP_STORED) as z:
-        z.write(FX+"big12.pdf","Books/A.pdf"); z.writestr("Books/Ab.pdf",sm.getvalue())
+        z.write(""+FX+"big12.pdf","Books/A.pdf"); z.writestr("Books/Ab.pdf",sm.getvalue())
     open("/tmp/books.zip","wb").write(zb.getvalue())
     page.set_input_files("#inArch","/tmp/books.zip"); page.wait_for_selector("#tree .row >> text=Books"); page.wait_for_timeout(500)
     page.fill("#optLimit","5"); page.dispatch_event("#optLimit","change"); page.wait_for_timeout(300)

@@ -1,5 +1,6 @@
 import io, zipfile, re, time, json as _json
-BASE0=""+os.path.dirname(os.path.abspath(__file__))+""
+import os
+BASE0=os.path.dirname(os.path.abspath(__file__))
 exec(open(BASE0+"/t5_head.py").read())
 import numpy as np
 from PIL import Image

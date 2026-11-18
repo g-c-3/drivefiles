@@ -10,6 +10,7 @@ var I={
  info:'<circle cx="12" cy="12" r="9"/><path d="M12 11v6"/><path d="M12 7.5v.01"/>',prev:'<path d="m15 5-7 7 7 7"/>',next:'<path d="m9 5 7 7-7 7"/>',
  plus:'<path d="M12 5v14M5 12h14"/>',minus:'<path d="M5 12h14"/>',fit:'<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>',
  undo:'<path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/>',redo:'<path d="m15 14 5-5-5-5"/><path d="M20 9H10a6 6 0 0 0 0 12h3"/>',
+ justify:'<path d="M4 6h16"/><path d="M4 10h16"/><path d="M4 14h16"/><path d="M4 18h16"/>',
  search:'<circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/>',wrap:'<path d="M4 6h16"/><path d="M4 12h13a3 3 0 0 1 0 6h-4"/><path d="m15 15-2 3 2 3"/><path d="M4 18h5"/>',
  copy:'<rect x="9" y="9" width="11" height="11" rx="2.5"/><path d="M5 15V6a2 2 0 0 1 2-2h8"/>',archive:'<rect x="3" y="4" width="18" height="5" rx="1.5"/><path d="M5 9v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9"/><path d="M10 13h4"/>',
  convert:'<path d="M4 7h13l-3-3"/><path d="M20 17H7l3 3"/>',x:'<path d="M6 6l12 12M18 6 6 18"/>',clock:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
@@ -45,7 +46,7 @@ var V={item:null,ed:null,dirty:false,urls:[],cleanup:[],pushed:false,token:0,sib
 var root=el("div",{id:"viewer",class:"viewer",role:"dialog","aria-modal":"true","aria-label":"File viewer",hidden:true});
 var titleEl=el("b",{class:"vname"}),subEl=el("small",{class:"vsub"}),actions=el("div",{class:"vactions"}),subbar=el("div",{class:"vsubbar",hidden:true}),body=el("div",{class:"vbody"}),foot=el("div",{class:"vfoot",hidden:true});
 var progFill=el("i"),progLabel=el("span"),progEl=el("div",{class:"vprog",hidden:true},progFill,progLabel);
-root.append(el("header",{class:"vbar"},ibtn("back","Back",function(){close();}),el("div",{class:"vtitle"},titleEl,subEl),actions),progEl,subbar,body,foot);
+root.append(el("button",{type:"button",class:"vclose","aria-label":"Close",title:"Close",onclick:function(){close();}},ic("x")),el("header",{class:"vbar"},ibtn("back","Back",function(){close();}),el("div",{class:"vtitle"},titleEl,subEl),actions),progEl,subbar,body,foot);
 document.body.appendChild(root);
 
 var progTimer=null;
@@ -85,7 +86,7 @@ function open(path,o){
     load({path:path,name:H.basename(path),size:info.size,sha:info.sha,real:true,isNew:!!o.isNew,getBlob:function(){return H.getBlob(path);}});
   });
 }
-function openBlob(x){confirmDiscard(function(){load({path:x.path||x.name,name:x.name,size:x.size||0,real:false,getBlob:x.getBlob});});}
+function openBlob(x){confirmDiscard(function(){load({path:x.path||x.name,name:x.name,size:x.size||0,real:false,reader:!!x.reader,getBlob:x.getBlob});});}
 function close(silent){
   if(root.hidden||root.classList.contains("vout")) return;
   var go=function(){
@@ -120,6 +121,7 @@ async function load(item){
   teardown();V.item=item;item.kind=kindOf(item.name);
   clearTimeout(V.hideT);root.classList.remove("vout");root.hidden=false;document.documentElement.classList.add("vopen");
   if(!V.nav&&window.AtlasNav){V.pushed=true;V.nav=window.AtlasNav.push(function(){ if(V.dirty){ confirmDiscard(function(){close(true);}); return false; } close(true); },"viewer");}
+  root.classList.toggle("reader",!!item.reader);
   titleEl.textContent=item.name;
   subEl.textContent=(item.real&&item.path.indexOf("/")>0?item.path.slice(0,item.path.lastIndexOf("/"))+"  ·  ":"")+H.fmt(item.size||0);
   if(item.real){V.siblings=H.siblings(item.path);V.sibIdx=V.siblings.indexOf(item.path);}else{V.siblings=[];V.sibIdx=-1;}
@@ -232,20 +234,38 @@ async function renderText(item,blob,token,isNew){
       pane.replaceChildren();sheetUI(wb,pane);
     }
   }
+  var PROSE=isMd||ext==="txt"||ext==="text"||ext==="rst";
+  function justActive(){ return PROSE&&mode!=="edit"&&!(V.ed&&!V.ed.view.state.readOnly)&&(item.reader||!!H.prefs.justify); }
+  /* view only: never touches the text itself, and is switched off while editing */
+  function applyJustify(){
+    var on=justActive(), md=pane.querySelector(".md");
+    if(md){ md.classList.toggle("justify",on); if(on) md.setAttribute("lang","en"); }
+    editHost.classList.toggle("justify",on&&wrapOn&&mode==="code");
+  }
+  function justBtn(){
+    if(!PROSE){ var d=ibtn("justify","Justify: not useful for code",function(){H.toast("Justify isn't useful for code and data files.");},"dim"); d.setAttribute("aria-disabled","true"); return d; }
+    var needWrap=mode==="code"&&!wrapOn, b=ibtn("justify",needWrap?"Justify needs line wrapping on":(H.prefs.justify?"Justify text: on":"Justify text: off"),function(){
+      if(needWrap){ H.toast("Turn on wrapping to justify text."); return; }
+      H.prefs.justify=!H.prefs.justify; H.savePrefs(); paintBar();
+    },(H.prefs.justify&&!needWrap?"on":"")+(needWrap?" dim":""));
+    return b;
+  }
   function paintBar(){
     actions.replaceChildren();
     if(mode==="edit"||(V.ed&&!V.ed.view.state.readOnly&&mode!=="preview")){
       actions.append(ibtn("undo","Undo",function(){V.ed&&V.ed.undo();}),ibtn("redo","Redo",function(){V.ed&&V.ed.redo();}),ibtn("search","Find",function(){V.ed&&V.ed.find();}),
-        ibtn("wrap","Wrap lines",function(){wrapOn=!wrapOn;H.prefs.wrap=wrapOn;H.savePrefs();V.ed&&V.ed.setWrap(wrapOn);}));
+        ibtn("wrap","Wrap lines",function(){wrapOn=!wrapOn;H.prefs.wrap=wrapOn;H.savePrefs();V.ed&&V.ed.setWrap(wrapOn);applyJustify();}));
       if(ext==="json"||ext==="jsonc") actions.append(ibtn("braces","Format JSON",function(){var p=prettyJson(V.ed.get());if(p===null)H.toast("This isn't valid JSON.",true);else V.ed.setDoc(p);}));
       var s=tbtn("save",V.saving?"Saving…":"Save",function(){save().catch(function(){});},true);s.disabled=V.saving||(!V.dirty&&!item.isNew);actions.append(s);
       if(!item.isNew) actions.append(tbtn("","Done",function(){confirmDiscard(function(){leaveEdit();});}));
     }else{
-      if(mode==="code"){actions.append(ibtn("search","Find",function(){V.ed&&V.ed.find();}),ibtn("wrap","Wrap lines",function(){wrapOn=!wrapOn;H.prefs.wrap=wrapOn;H.savePrefs();V.ed&&V.ed.setWrap(wrapOn);}));}
+      if(mode==="code"){actions.append(ibtn("search","Find",function(){V.ed&&V.ed.find();}),ibtn("wrap","Wrap lines",function(){wrapOn=!wrapOn;H.prefs.wrap=wrapOn;H.savePrefs();V.ed&&V.ed.setWrap(wrapOn);applyJustify();}));}
+      if(!item.reader&&!item.isNew) actions.append(justBtn());
       if(canEdit) actions.append(tbtn("edit","Edit",function(){enterEdit();},false));
       V.common.forEach(function(b){actions.appendChild(b);});
     }
     if(info.ro&&item.real) subEl.textContent=info.ro;
+    applyJustify();
   }
   function paintTabs(){
     subbar.replaceChildren();

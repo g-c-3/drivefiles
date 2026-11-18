@@ -1,5 +1,6 @@
 import sys, io, random, time
-BASE0=""+os.path.dirname(os.path.abspath(__file__))+""
+import os
+BASE0=os.path.dirname(os.path.abspath(__file__))
 exec(open(BASE0+"/t5_head.py").read())
 from PIL import Image
 import pypdf

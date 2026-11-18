@@ -147,7 +147,7 @@ var S={
   ex:{names:[],readers:[],items:[],errors:[],root:null,locked:[],dest:"",destTouched:false,running:false,cancel:false,opening:false},
   lib:{cwd:"",sel:new Set(),q:"",exp:new Set(),hits:null,busy:0},
   act:{loaded:false,list:[]},
-  opts:{filePolicy:"skip",folderPolicy:"merge",strip:false,limit:50,splitPdf:true,forceSame:false,theme:"dark",sortKey:"name",sortDir:"asc",hideApp:false,offline:false,recovery:true,wrap:true,keepSel:false,autoLock:2,shrink:false,shrinkMax:2048,compressPdf:false,compressLevel:"medium"}
+  opts:{filePolicy:"skip",folderPolicy:"merge",strip:false,limit:50,splitPdf:true,forceSame:false,theme:"dark",sortKey:"name",sortDir:"asc",hideApp:false,offline:false,recovery:true,wrap:true,justify:false,keepSel:false,autoLock:2,shrink:false,shrinkMax:2048,compressPdf:false,compressLevel:"medium"}
 };
 var VK="a_vault", PK="a_prefs", lastWrite=0, hiddenAt=0;
 
@@ -345,7 +345,7 @@ async function openReadme(){
     var r=await fetch("README.md",{cache:"no-cache"}); if(!r.ok) throw new Error("README couldn't be loaded.");
     var blob=new Blob([await r.text()],{type:"text/markdown"});
     await loadScript("app/viewer.js");
-    window.AtlasViewer.openBlob({name:"README.md",path:"README.md",size:blob.size,getBlob:async function(){return blob;}});
+    window.AtlasViewer.openBlob({name:"README.md",path:"README.md",size:blob.size,reader:true,getBlob:async function(){return blob;}});
   }catch(e){ toast((e&&e.message)||"README couldn't be opened.",true); }
 }
 function aboutSheet(){
@@ -2445,6 +2445,7 @@ $("menuBtn").addEventListener("click",function(){
     grp("Preferences",
       shrinkControls(),
       switchRow("Wrap long lines in files",!!S.opts.wrap,function(v){S.opts.wrap=v;savePrefs();},"Applies to text and code you open. You can still switch it per file."),
+      switchRow("Justify text when viewing",!!S.opts.justify,function(v){S.opts.justify=v;savePrefs();},"Markdown and plain text only, view only. Needs line wrapping. Code and data files are never justified."),
       switchRow("Keep selection between folders",!!S.opts.keepSel,function(v){S.opts.keepSel=v;savePrefs();if(!v){S.lib.sel.clear();renderLibrary();}},"Off: selected items are cleared as soon as you go to another folder."),
       switchRow("Keep opened files for offline use",!!S.opts.offline,function(v){S.opts.offline=v;savePrefs();if(!v)clearOffline();},"Saves opened files on this device, unencrypted. Turn off on a shared device."),
       switchRow("Recovery backup before changes",!!S.opts.recovery,function(v){S.opts.recovery=v;savePrefs();},"Before the first change of each session, publishes a RecoveryBackup release of the whole repo.")),
