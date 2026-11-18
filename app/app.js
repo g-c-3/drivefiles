@@ -16,6 +16,7 @@ async function needZip(){ await loadScript("app/vendor/zip.min.js"); if(!needZip
 
 /* ================= helpers ================= */
 var ICONS={
+ key:'<circle cx="8" cy="15" r="4"/><path d="M11 12l8-8"/><path d="M16 7l3 3"/>',
  mark:'<circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17"/><path d="M12 3.5c3 2.6 3 14.4 0 17"/><path d="M12 3.5c-3 2.6-3 14.4 0 17"/>',
  upload:'<path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M5 20h14"/>',
  files:'<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
@@ -290,7 +291,81 @@ function lockNow(){
   S.cfg=null; S.pass=null; S.pid=null; resetRepo(); S.lib.sel.clear(); closeAllSheets();
   showHome();
 }
+/* ================= disclaimer, README, About ================= */
+var DISC_VER=1, CONTACT="gc3thedev@gmail.com";
+function discBody(){
+  return el("div",{class:"disc"},
+    el("p",{class:"disc-lead"},"Atlas is a free tool that works directly on your GitHub repository. Please read this before you continue."),
+    el("ul",{class:"disc-list"},
+      el("li",null,el("b",null,"Use at your own will and risk. "),"You are fully responsible for what you do with Atlas, your repository, your access token and your files."),
+      el("li",null,el("b",null,"No liability. "),"This site, its owner and its creator are not responsible for any data loss, security issue, theft, damage, loss or harm of any kind. That includes your repository and its contents, its privacy, your identity, your account, and anything else connected to your use of Atlas."),
+      el("li",null,el("b",null,"No warranty. "),"Atlas is provided as is, without promises that it is error free, always available, or suitable for any purpose. Bugs, interrupted uploads and browser limits can happen."),
+      el("li",null,el("b",null,"Your token is yours to protect. "),"It is stored only on this device, encrypted with your passcode. Use a token limited to this one repository, and revoke it on GitHub if you lose the device."),
+      el("li",null,el("b",null,"Unsaved edits are not kept. "),"If Atlas locks, logs you out or the page reloads while a file is open, changes you haven't saved are lost.")));
+}
+function disclaimerGate(p,go){
+  var a=openSheet({title:"Before you continue",content:discBody(),closeX:false,actions:[
+    {label:"I don't agree",kind:"ghost",fn:async function(x){ notAgree(p,go); x.busy(false); }},
+    {label:"I understand and accept",kind:"primary",fn:async function(x){
+      p.ack=DISC_VER; writeStore(); x.lock(false); x.close(); setTimeout(go,260);
+    }}]});
+  a.lock(true); a.layer.classList.add("gate");
+  return a;
+}
+function notAgree(p,go){
+  var b=openSheet({title:"You need to accept to continue",content:el("div",{class:"disc"},
+      el("p",{class:"disc-lead"},"Atlas can't be opened until you accept the terms. Choose what to do next."),
+      el("p",{class:"muted small"},"Log out keeps your saved repository, and the terms will be shown again at your next login. Deleting the token also removes this repository from the device; the token itself stays valid on GitHub until you revoke it there.")),
+    closeX:false,actions:[
+    {label:"Read it again",kind:"ghost",fn:async function(x){ x.lock(false); x.close(); }},
+    {label:"Log out",kind:"",fn:async function(x){ x.lock(false); x.close(); leaveGate(p,false); }},
+    {label:"Delete token & log out",kind:"danger",fn:async function(x){ x.lock(false); x.close(); leaveGate(p,true); }}]});
+  b.lock(true); b.layer.classList.add("gate");
+}
+function leaveGate(p,del){
+  if(del){
+    PF.list=PF.list.filter(function(q){return q.id!==p.id;});
+    if(PF.last===p.id) PF.last=PF.list.length?PF.list[0].id:null;
+    try{localStorage.removeItem("a_pins_"+p.id);}catch(e){}
+    writeStore();
+  }
+  closeAllSheets(); showHome();
+  toast(del?"Token deleted from this device":"Logged out", false, 3200, del?"Revoke it on GitHub too, to be safe.":"");
+}
+async function openReadme(){
+  try{
+    var r=await fetch("README.md",{cache:"no-cache"}); if(!r.ok) throw new Error("README couldn't be loaded.");
+    var blob=new Blob([await r.text()],{type:"text/markdown"});
+    await loadScript("app/viewer.js");
+    window.AtlasViewer.openBlob({name:"README.md",path:"README.md",size:blob.size,getBlob:async function(){return blob;}});
+  }catch(e){ toast((e&&e.message)||"README couldn't be opened.",true); }
+}
+function aboutSheet(){
+  var chip=function(t){return el("span",{class:"chip"},t);};
+  var fact=function(ic,t,s){return el("div",{class:"fact"},el("span",{class:"fi"},ico(ic)),el("div",null,el("b",null,t),el("span",null,s)));};
+  var content=el("div",{class:"about"},
+    el("div",{class:"ab-hero"},el("div",{class:"mark"},ico("mark")),el("h3",null,"Atlas"),el("p",null,"Your GitHub repository, in your pocket.")),
+    el("div",{class:"chips"},chip("Browse"),chip("View"),chip("Edit"),chip("Upload"),chip("Extract archives"),chip("PDF tools"),chip("Backups")),
+    el("div",{class:"facts"},
+      fact("lock","Private by design","Talks only to GitHub. No server, no tracking."),
+      fact("key","Token stays with you","Encrypted on this device with your passcode."),
+      fact("files","Built for phones","Fast, touch friendly, works offline once opened."),
+      fact("archive","Free and open","MIT licensed. Read the code, change it, share it.")),
+    el("div",{class:"ab-btns"},
+      el("button",{type:"button",class:"pill",onclick:function(){openReadme();}},"README"),
+      el("button",{type:"button",class:"pill",onclick:function(){var a2=openSheet({title:"Terms of use",content:discBody(),closeX:true,noFooter:true,actions:[]});}},"Disclaimer"),
+      el("a",{class:"pill",href:"LICENSE",target:"_blank",rel:"noopener"},"Licence")),
+    el("div",{class:"ab-credit"},
+      el("p",null,"Designed and built by ",el("b",null,"Gokul Chandar"),"."),
+      el("p",null,"Questions or ideas? ",el("a",{href:"mailto:"+CONTACT},CONTACT)),
+      el("p",{class:"muted small"},"Thank you for using Atlas.")));
+  openSheet({title:"About",content:content,noFooter:true,closeX:true,actions:[]});
+}
+function aboutPill(){ return el("button",{type:"button",class:"pill about-pill",onclick:function(){aboutSheet();}},ico("info"),"About"); }
+function infoBtn(){ return el("button",{type:"button",class:"infobtn","aria-label":"About Atlas and terms of use",title:"README",onclick:function(){openReadme();}},ico("info")); }
+
 function startSession(p,cfg,pass){
+  if(p.ack!==DISC_VER){ disclaimerGate(p,function(){startSession(p,cfg,pass);}); return; }
   if(!p.repo){ p.repo=cfg.repo; p.branch=cfg.branch; }
   PF.last=p.id; writeStore();
   S.cfg=cfg; S.pass=pass||null; S.pid=p.id; S.bk=null; resetRepo(); closeAllSheets(); enterApp();
@@ -312,6 +387,8 @@ function showHome(){
   }
   showScreen("s-home");
 }
+document.querySelectorAll("[data-info]").forEach(function(b){b.addEventListener("click",openReadme);});
+$("homeAbout").appendChild(aboutPill());
 $("homeSel").addEventListener("change",function(){ if(findProf($("homeSel").value)){PF.last=$("homeSel").value;writeStore();} });
 $("homeAdd").addEventListener("click",function(){showSetup(null);});
 $("homeLogin").addEventListener("click",function(){ if($("homeSel").value) loginWith($("homeSel").value); });
@@ -468,7 +545,7 @@ async function saveSetup(openAfter){
     var p=await sealProfile(cfg,pass), old=null, i;
     if(editingId) old=findProf(editingId);
     if(!old) for(i=0;i<PF.list.length;i++){ var q=PF.list[i]; if(profName(q).toLowerCase()===cfg.repo.toLowerCase()&&q.branch===cfg.branch){old=q;break;} }
-    if(old){ p.id=old.id; PF.list[PF.list.indexOf(old)]=p; } else { p.id=newId(); PF.list.push(p); }
+    if(old){ p.id=old.id; if(old.ack) p.ack=old.ack; PF.list[PF.list.indexOf(old)]=p; } else { p.id=newId(); PF.list.push(p); }
     PF.last=p.id; writeStore();
     if(editingId){ S.cfg=cfg; S.pass=pass; S.pid=p.id; resetRepo(); enterApp(); toast("Saved"); }
     else if(openAfter) startSession(p,cfg,pass);
@@ -2376,7 +2453,7 @@ $("menuBtn").addEventListener("click",function(){
       mrow("lock","Log out","Lock Atlas now",pick(lockNow)),
       mrow("trash","Clear offline files","Remove files saved for offline use",async function(){await clearOffline();toast("Offline files cleared");}),
       mrow("undo","Reset this device","Forget every saved repository",pick(resetDeviceSheet),true)));
-  openSheet({title:"Settings",content:el("div",null,list,el("p",{class:"credit"},"Created by Gokul Chandar")),noFooter:true,closeX:true,actions:[]});
+  openSheet({title:"Settings",content:el("div",null,list,el("p",{class:"credit"},"Created by Gokul Chandar"),el("div",{class:"aboutrow"},aboutPill())),noFooter:true,closeX:true,actions:[]});
 });
 if("serviceWorker" in navigator&&/^https?:/.test(location.protocol)){ window.addEventListener("load",function(){navigator.serviceWorker.register("sw.js").catch(function(){});}); }
 

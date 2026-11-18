@@ -1,6 +1,5 @@
-import os
 import sys, io, random, time
-BASE0=os.path.dirname(os.path.abspath(__file__))
+BASE0=""+os.path.dirname(os.path.abspath(__file__))+""
 exec(open(BASE0+"/t5_head.py").read())
 from PIL import Image
 import pypdf
@@ -46,7 +45,7 @@ def add_repo(page,pw):
 with sync_playwright() as p:
     b=p.chromium.launch()
     ctx=b.new_context(viewport={"width":1280,"height":860},accept_downloads=True)
-    page=ctx.new_page(); errors=[]
+    page=(ctx.add_init_script(__import__("auto").AUTO), ctx.new_page())[1]; errors=[]
     page.on("pageerror",lambda e:errors.append("PAGEERR "+str(e)))
     page.route("https://api.github.com/**",handler2)
     URL=f"http://127.0.0.1:{port}/index.html"

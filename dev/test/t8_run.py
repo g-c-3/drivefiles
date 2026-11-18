@@ -1,6 +1,5 @@
-import os
 import io, zipfile, re, time, json as _json
-BASE0=os.path.dirname(os.path.abspath(__file__))
+BASE0=""+os.path.dirname(os.path.abspath(__file__))+""
 exec(open(BASE0+"/t5_head.py").read())
 import numpy as np
 from PIL import Image
@@ -28,7 +27,7 @@ def mkzip(path,files):
 mkzip("/tmp/r1.zip",{"Fresh/a.txt":"hello","Fresh/photo.jpg":PH,"Fresh/small.pdf":SMALL,"Docs/notes.md":"changed notes"})
 mkzip("/tmp/r2.zip",{"Docs/notes.md":"changed again","Scans/scan.pdf":SCAN})
 with sync_playwright() as p:
-    b=p.chromium.launch(); ctx=b.new_context(viewport={"width":390,"height":800},timezone_id="UTC"); page=ctx.new_page(); errors=[]; page.on("pageerror",lambda e:errors.append(str(e)))
+    b=p.chromium.launch(); ctx=b.new_context(viewport={"width":390,"height":800},timezone_id="UTC"); page=(ctx.add_init_script(__import__("auto").AUTO), ctx.new_page())[1]; errors=[]; page.on("pageerror",lambda e:errors.append(str(e)))
     page.route("https://api.github.com/**",handler)
     URL=f"http://127.0.0.1:{port}/index.html"
     # ---- SEO ----

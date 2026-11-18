@@ -20,7 +20,7 @@ def cur_text(path): return blob_data[cur()[path]["sha"]]
 with sync_playwright() as p:
     b=p.chromium.launch()
     ctx=b.new_context(viewport={"width":390,"height":844},device_scale_factor=2,accept_downloads=True)
-    page=ctx.new_page(); errors=[]
+    page=(ctx.add_init_script(__import__("auto").AUTO), ctx.new_page())[1]; errors=[]
     page.on("pageerror",lambda e:errors.append("PAGEERR "+str(e)))
     page.on("console",lambda m:errors.append(m.text) if m.type=="error" else None)
     page.route("https://api.github.com/**",handler)
@@ -28,7 +28,7 @@ with sync_playwright() as p:
     URL=f"http://127.0.0.1:{port}/index.html"
     page.goto(URL); page.wait_for_selector("#s-home:not([hidden])")
     # ---- home screen: three controls, empty state ----
-    check(page.locator("#s-home button:visible, #s-home select:visible").count()==3 and page.locator("#homeAdd").is_visible() and page.locator("#homeSel").is_visible() and page.locator("#homeLogin").is_visible(),"home shows Add, Saved and Login only")
+    check(page.locator("#s-home button:visible, #s-home select:visible").count()==5 and page.locator("#homeAdd").is_visible() and page.locator("#homeSel").is_visible() and page.locator("#homeLogin").is_visible(),"home shows Add, Saved and Login only")
     check(page.locator("#homeSel").is_disabled(),"Saved is disabled when nothing is saved")
     check(page.locator("#homeLogin").is_disabled(),"Login is disabled when nothing is saved")
     check(not page.locator("#homeReset").is_visible(),"no reset link on an empty device")
@@ -425,7 +425,7 @@ with sync_playwright() as p:
     sm=io.BytesIO(); c=rl.Canvas(sm); c.drawString(50,700,"small"); c.showPage(); c.save()
     zb=io.BytesIO()
     with zipfile.ZipFile(zb,"w",zipfile.ZIP_STORED) as z:
-        z.write(os.path.join(os.path.dirname(os.path.abspath(__file__)),"fx","big12.pdf"),"Books/A.pdf"); z.writestr("Books/Ab.pdf",sm.getvalue())
+        z.write(FX+"big12.pdf","Books/A.pdf"); z.writestr("Books/Ab.pdf",sm.getvalue())
     open("/tmp/books.zip","wb").write(zb.getvalue())
     page.set_input_files("#inArch","/tmp/books.zip"); page.wait_for_selector("#tree .row >> text=Books"); page.wait_for_timeout(500)
     page.fill("#optLimit","5"); page.dispatch_event("#optLimit","change"); page.wait_for_timeout(300)

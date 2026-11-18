@@ -18,7 +18,7 @@ loose = BASE + "/loose.txt"; open(loose, "wb").write(b"loose file\n")
 
 # ---------- static server ----------
 class H(http.server.SimpleHTTPRequestHandler):
-    def __init__(self, *a, **k): super().__init__(*a, directory="/home/claude/site", **k)
+    def __init__(self, *a, **k): super().__init__(*a, directory=os.path.join(os.path.dirname(os.path.abspath(__file__)),"..",".."), **k)
     def log_message(self, *a): pass
 srv = socketserver.TCPServer(("127.0.0.1", 0), H); port = srv.server_address[1]
 threading.Thread(target=srv.serve_forever, daemon=True).start()

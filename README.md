@@ -8,6 +8,10 @@
 
 </div>
 
+> [!CAUTION]
+> **Disclaimer: use at your own will and risk.**
+> This site, its owner and its creator are **not responsible** for any data loss, security issue, theft, damage, loss or harm of any kind. That covers your repository and its data, its privacy, your identity, your account, and everything else connected to using Atlas. Atlas is provided "as is", with no warranty. You are fully responsible for your token, your passcode and your files. The first time you log in to each repository, Atlas shows this notice and you must accept it before you can continue. Nothing here is legal advice.
+
 > [!IMPORTANT]
 > **App link: <https://g-c-3.github.io/githubmanager/>**
 > Works on phones, foldables, tablets and computers. Everything runs in your browser. There is no server.
@@ -218,6 +222,16 @@ Folders are always merged: new files go into the folder that's already there. Th
 - **Tapping a row** always opens the folder or file; only the checkbox selects. With "Keep selection between folders" off, selections are cleared when you go to another folder.
 - Controls are smaller and tighter throughout.
 
+## Terms notice, info button and About
+
+- **Terms notice.** The first time you log in to a repository (and once for repositories saved earlier), Atlas shows a short notice. You must choose **I understand and accept** to enter. **I don't agree** offers **Log out** (the notice returns next login), **Delete token & log out** (removes the saved repository and token from this device; revoke the token on GitHub too), or **Read it again**. If you lock, log out or reload before deciding, you are asked again. Once accepted it is not shown again for that repository.
+- **Info button.** The round **i** at the top right of the Add and Login screens opens this README inside Atlas.
+- **About.** A pill button under "Created by Gokul Chandar" (Settings and the login screen) opens a small About dashboard with the features, privacy facts, links to this README, the disclaimer and the licence, and contact: gc3thedev@gmail.com.
+
+## Unsaved edits are not kept
+
+If Atlas locks (auto-lock or the lock button), you log out, or the page reloads while a file is open for editing, **changes you haven't saved are lost**. Atlas closes the open file when it locks and, after you log in again, reopens the same place, but not your unsaved text. Save before you step away.
+
 ## Offline and install
 
 - Atlas can be **installed** (browser menu → Install app / Add to Home screen) and its own files work offline.
@@ -255,9 +269,13 @@ Folders are always merged: new files go into the folder that's already there. Th
 | Page looks old after an update | Close and reopen the app once; the new files load on the second visit |
 | PDF shows blank pages | Reload; very large scans can take a moment |
 
+## Disclaimer (again)
+
+Atlas is used entirely **at your own will and risk**. The owner and creator accept no responsibility for data loss, security, theft, damage or loss, or anything relating to your repository, its data, its privacy, your identity, or anything else. See the notice at the top of this file.
+
 ## Credits and licences
 
-**Atlas was created by Gokul Chandar.**
+**Atlas was created by Gokul Chandar** (gc3thedev@gmail.com).
 
 Atlas itself is released under the **MIT License** (see `LICENSE`). Bundled third-party components keep their own licences, listed below and in `app/licenses/`.
 

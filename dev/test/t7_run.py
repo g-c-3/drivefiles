@@ -1,6 +1,5 @@
-import os
 import io, os, random, time
-BASE0=os.path.dirname(os.path.abspath(__file__))
+BASE0=""+os.path.dirname(os.path.abspath(__file__))+""
 exec(open(BASE0+"/t5_head.py").read())
 from PIL import Image, ImageFilter
 import pypdf, numpy as np
@@ -24,7 +23,7 @@ open(BASE+"/scanA.pdf","wb").write(A); open(BASE+"/scanB.pdf","wb").write(B)
 snaps["t0"]["Docs/scanA.pdf"]={"sha":add_blob(A),"mode":"100644","size":len(A)}
 with sync_playwright() as p:
     b=p.chromium.launch(); ctx=b.new_context(viewport={"width":1100,"height":850},accept_downloads=True)
-    page=ctx.new_page(); errors=[]; page.on("pageerror",lambda e:errors.append(str(e)))
+    page=(ctx.add_init_script(__import__("auto").AUTO), ctx.new_page())[1]; errors=[]; page.on("pageerror",lambda e:errors.append(str(e)))
     page.route("https://api.github.com/**",handler)
     URL=f"http://127.0.0.1:{port}/index.html"
     page.goto(URL); page.evaluate("localStorage.setItem('a_prefs',JSON.stringify({limit:3,compressPdf:true,compressLevel:'strong'}))"); page.reload(); page.wait_for_selector("#s-home:not([hidden])")

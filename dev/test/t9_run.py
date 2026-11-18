@@ -6,7 +6,7 @@ def check(c,m):
     print(("PASS " if c else "FAIL ")+m, flush=True)
     if not c: fails.append(m)
 with sync_playwright() as p:
-    b=p.chromium.launch(); ctx=b.new_context(viewport={"width":390,"height":800},timezone_id="UTC"); page=ctx.new_page(); errors=[]; page.on("pageerror",lambda e:errors.append(str(e)))
+    b=p.chromium.launch(); ctx=b.new_context(viewport={"width":390,"height":800},timezone_id="UTC"); page=(ctx.add_init_script(__import__("auto").AUTO), ctx.new_page())[1]; errors=[]; page.on("pageerror",lambda e:errors.append(str(e)))
     page.route("https://api.github.com/**",handler)
     page.goto(f"http://127.0.0.1:{port}/index.html"); page.wait_for_selector("#s-home:not([hidden])")
     page.click("#homeAdd"); page.fill("#cfgOwner","me"); page.fill("#cfgRepo","qp"); page.fill("#cfgToken","test-token"); page.fill("#cfgPass","a"); page.click("#setupOpen"); page.wait_for_selector("#libList .row"); page.wait_for_timeout(800)
